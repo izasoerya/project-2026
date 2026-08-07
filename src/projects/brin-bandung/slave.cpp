@@ -26,12 +26,12 @@ uint16_t modbusData[MAX_REGISTER];
 ModbusMessage FC03(ModbusMessage request);
 ModbusMessage FC06(ModbusMessage request);
 
-const uint8_t pinAnemo = 2;           // TODO: CHANGE TO APPROPRIATE PIN
-const uint8_t pinRainfall = 3;        // TODO: CHANGE TO APPROPRIATE PIN
-const uint8_t pinWindDirectionRX = 4; // TODO: CHANGE TO APPROPRIATE PIN
-const uint8_t pinWindDirectionTX = 5; // TODO: CHANGE TO APPROPRIATE PIN
-const uint8_t pinSDA = 4;             // TODO: CHANGE TO APPROPRIATE PIN
-const uint8_t pinSCL = 5;             // TODO: CHANGE TO APPROPRIATE PIN
+const uint8_t pinAnemo = 9;
+const uint8_t pinRainfall = 10;
+const uint8_t pinWindDirectionRX = 5; // TODO: CHECK DOUBLE PLZ
+const uint8_t pinWindDirectionTX = 6; // TODO: CHECK DOUBLE PLZ
+const uint8_t pinSDA = 7;
+const uint8_t pinSCL = 8;
 
 SHT2x sht;
 
