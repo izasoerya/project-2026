@@ -1,8 +1,8 @@
 #include "wifi_bundle.h"
 
 WiFiBundle::WiFiBundle(
-        const char *ssid, const char *password, const char *hostname,
-        wifi_power_t *txPower)
+    const char *ssid, const char *password, const char *hostname,
+    wifi_power_t *txPower)
     : _ssid(ssid), _password(password), _hostname(hostname),
       _txPowerConfig(txPower) {}
 
@@ -27,13 +27,13 @@ bool WiFiBundle::begin(bool restartOnFail)
         counter++;
         if (counter > 40) // 20 second
             if (restartOnFail)
-                ESP.restart();
+                esp_restart();
             else
                 return false;
     }
     if (!_setupMDNS())
         if (restartOnFail)
-            ESP.restart();
+            esp_restart();
         else
             return false;
 
