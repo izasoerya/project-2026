@@ -5,3 +5,4 @@
 .vscode/ipch
 src/projects/aquaponic/config.h
 src/projects/brin-bandung/config.h
+src/projects/brin-spas/config.h
