@@ -13,7 +13,7 @@
 
 const char *ssid = "NodeSensorWiFi1";
 const char *password = "muhammadnabiyullah";
-const char *hostname = "slave-arr-bandung-persemaian-1";
+const char *hostname = "slave-arr-bandung-persemaian-2"; //! RECHECK THIS EVERYTIME COMPILE
 WiFiModule wifi(ssid, password, hostname, WIFI_POWER_19_5dBm);
 
 AsyncWebServer server(80);
@@ -28,15 +28,15 @@ WireGuard wg;
  *  array[7] = (uint8_t) reset reason
  */
 ModbusServerTCPasync modbusServer;
-const uint8_t MAX_REGISTER = 4;
+const uint8_t MAX_REGISTER = 9;
 uint16_t modbusData[MAX_REGISTER];
 ModbusMessage FC03(ModbusMessage request);
 ModbusMessage FC06(ModbusMessage request);
 
 DFRobot_RainfallSensor_I2C rainSensor(&Wire);
 
-const uint8_t pinSDA = 4; // TODO: CHANGE TO APPROPRIATE PIN
-const uint8_t pinSCL = 5; // TODO: CHANGE TO APPROPRIATE PIN
+const uint8_t pinSDA = 7; // TODO: CHANGE TO APPROPRIATE PIN
+const uint8_t pinSCL = 6; // TODO: CHANGE TO APPROPRIATE PIN
 
 const char *ntpServer = "pool.ntp.org";
 const long gmtOffset_sec = 25200;
@@ -59,9 +59,16 @@ void setup()
     esp_task_wdt_add(NULL);
 
     ElegantOTA.setAutoReboot(true);
+    ElegantOTA.onEnd([](bool success)
+                     {if (success) esp_restart(); });
     ElegantOTA.begin(&server);
     WebSerial.begin(&server);
     server.begin();
+
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send(200, "text/plain", "Test Successful!"); });
+    server.on("/restart", HTTP_GET, [](AsyncWebServerRequest *request)
+              { esp_restart(); });
 
     Wire.begin(pinSDA, pinSCL);
     if (rainSensor.begin())
@@ -81,15 +88,15 @@ void setup()
         {
             Serial.println("\nNTP Sync Failed! Restarting...");
             WebSerial.println("\nNTP Sync Failed! Restarting...");
-            ESP.restart(); // Critical: WireGuard handshake will fail without correct time
+            esp_restart(); // Critical: WireGuard handshake will fail without correct time
         }
         retryCounter++;
     }
 
     IPAddress wgLocalIP;
-    wgLocalIP.fromString(WG_DEVICE_SLAVE_ARR_LOCAL_IP_1);
-    Serial.printf("wg ip: %s", wgLocalIP.toString());
-    bool wgOk = wg.begin(wgLocalIP, WG_DEVICE_SLAVE_ARR_PRIVATE_KEY_1,
+    wgLocalIP.fromString(WG_DEVICE_SLAVE_ARR_LOCAL_IP_2);
+    Serial.printf("wg ip: %s\n", wgLocalIP.toString());
+    bool wgOk = wg.begin(wgLocalIP, WG_DEVICE_SLAVE_ARR_PRIVATE_KEY_2,
                          WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
     if (wgOk)
     {
@@ -105,7 +112,6 @@ void setup()
     modbusServer.registerWorker(1, READ_HOLD_REGISTER, &FC03); // FC=03 for serverID=1
     modbusServer.registerWorker(1, WRITE_HOLD_REGISTER, &FC06);
     modbusServer.start(5000, 2, 20000);
-    modbusData[12] = delayReading;
 }
 
 void loop()
@@ -132,6 +138,7 @@ void loop()
         modbusData[5] = (uint16_t)(minHeap >> 16);
         modbusData[6] = (uint16_t)(minHeap & 0xFFFF);
         modbusData[7] = (uint16_t)esp_reset_reason();
+        modbusData[8] = (fabs)(wifi.getRssi());
 
         struct tm timeinfo;
         getLocalTime(&timeinfo);
@@ -162,13 +169,13 @@ ModbusMessage FC03(ModbusMessage request)
         for (uint8_t i = 0; i < words; i++)
             response.add((uint16_t)modbusData[addr + i]);
 
-        Serial.printf("Req Slave Id: %d, FC: %d, Data: [%d, %d, %d, %d, %d]\n",
+        Serial.printf("Req Slave Id: %d, FC: %d, Data: [%d]\n",
                       request.getServerID(), request.getFunctionCode(),
-                      modbusData[addr + 0], modbusData[addr + 1], modbusData[addr + 2], modbusData[addr + 3], modbusData[addr + 4]);
+                      modbusData[addr + 0]);
 
-        WebSerial.printf("Req Slave Id: %d, FC: %d, Data: [%d, %d, %d, %d, %d]\n",
+        WebSerial.printf("Req Slave Id: %d, FC: %d, Data: [%d]\n",
                          request.getServerID(), request.getFunctionCode(),
-                         modbusData[addr + 0], modbusData[addr + 1], modbusData[addr + 2], modbusData[addr + 3], modbusData[addr + 4]);
+                         modbusData[addr + 0]);
     }
     return response;
 }
@@ -183,21 +190,70 @@ ModbusMessage FC06(ModbusMessage request)
     request.get(4, value); // read value from request
 
     Serial.printf("FC06: Write register %d = %d\n", addr, value);
+    WebSerial.printf("FC06: Write register %d = %d\n", addr, value);
 
-    // Address overflow check
     if (addr >= 16)
-    { // Your modbusData array is 16 words
+    {
         response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
         return response;
     }
 
-    // Write to modbusDatary
     modbusData[addr] = value;
 
-    // Echo back the request (standard FC06 response)
     response.add(request.getServerID(), request.getFunctionCode());
     response.add(addr);
     response.add(value);
 
     return response;
 }
+
+// #include <Arduino.h>
+// #include <Wire.h>
+
+// void setup()
+// {
+//     Wire.begin(7, 6);
+//     Serial.begin(115200);
+//     Serial.println("\nI2C Scanner");
+// }
+
+// void loop()
+// {
+//     byte error, address;
+//     int nDevices;
+//     Serial.println("Scanning...");
+//     nDevices = 0;
+//     for (address = 1; address < 127; address++)
+//     {
+//         Wire.beginTransmission(address);
+//         error = Wire.endTransmission();
+//         if (error == 0)
+//         {
+//             Serial.print("I2C device found at address 0x");
+//             if (address < 16)
+//             {
+//                 Serial.print("0");
+//             }
+//             Serial.println(address, HEX);
+//             nDevices++;
+//         }
+//         else if (error == 4)
+//         {
+//             Serial.print("Unknow error at address 0x");
+//             if (address < 16)
+//             {
+//                 Serial.print("0");
+//             }
+//             Serial.println(address, HEX);
+//         }
+//     }
+//     if (nDevices == 0)
+//     {
+//         Serial.println("No I2C devices found\n");
+//     }
+//     else
+//     {
+//         Serial.println("done\n");
+//     }
+//     delay(5000);
+// }
