@@ -16,12 +16,12 @@
 #define TFT_CS_PIN 5
 
 TFT_eSPI tft = TFT_eSPI();
-DisplayTFT480X320P display(tft);
+DisplayTFT320X480PV display(tft);
 
 const char *ssid = "NodeSensorWiFi1";
 const char *password = "muhammadnabiyullah";
-const char *hostName = "master-bandung-persemaian-1";
-WiFiModule wifi(ssid, password, hostName);
+const char *hostName = "master-bandung-persemaian-2"; //! RECHECK THIS EVERYTIME COMPILE
+WiFiModule wifi(ssid, password, hostName, WIFI_POWER_8_5dBm);
 
 const char *supabaseUrl = "https://pykernnkhvnssplhzcvn.supabase.co";
 const char *supabasePublicKey = "sb_publishable_coDPUa845ZtfYmoBWlZlgw_eH5vsCY7";
@@ -34,8 +34,8 @@ const char *ntpServer = "pool.ntp.org";
 const uint16_t gmtOffset_sec = 25200;
 const uint16_t daylightOffset_sec = 0;
 
-const char *modbusSlaveUrl = "slave-bandung-persemaian-1";
-const char *modbusSlaveArrUrl = "slave-arr-bandung-persemaian-1";
+const char *modbusSlaveUrl = "slave-bandung-persemaian-2";        //! RECHECK THIS EVERYTIME COMPILE
+const char *modbusSlaveArrUrl = "slave-arr-bandung-persemaian-2"; //! RECHECK THIS EVERYTIME COMPILE
 const uint16_t modbusSlavePort = 5000;
 ModbusClientTCPasync *modbusClient = nullptr;
 ModbusClientTCPasync *modbusArrClient = nullptr;
@@ -44,9 +44,11 @@ void onErrorHandler(Error error, uint32_t token);
 void onDataHandlerArr(ModbusMessage response, uint32_t token);
 void onErrorHandlerArr(Error error, uint32_t token);
 
-const uint32_t deviceId = 1;
+const uint32_t deviceId = 2; //! RECHECK THIS EVERYTIME COMPILE
+
 uint32_t prevSamplingMillis = 0;
 uint32_t prevSystemLoggingMillis = 0;
+uint32_t prevNTPMillis = 0;
 
 uint32_t stampDataModbusCounter = 0;
 uint32_t stampDataModbusArrCounter = 0;
@@ -67,13 +69,15 @@ void setup()
 
     ElegantOTA.begin(&server);
     ElegantOTA.setAutoReboot(true);
+    ElegantOTA.onEnd([](bool success)
+                     {if(success) esp_restart(); });
     WebSerial.begin(&server);
     server.begin();
 
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
               { request->send(200, "text/plain", "Test Successful!"); });
     server.on("/restart", HTTP_GET, [](AsyncWebServerRequest *request)
-              { ESP.restart(); });
+              { esp_restart(); });
 
     uint8_t retryCounter = 0;
     struct tm timeinfo;
@@ -107,13 +111,16 @@ void setup()
     if (resolved != IPAddress(0, 0, 0, 0))
         modbusSlaveIP = resolved;
     else
-        ESP.restart(); // Master cant reach slave, no data will be feeded. Just restart
+    {
+        Serial.println("Failed to expect slave data");    // Continue with cheap tipping bucket
+        WebSerial.println("Failed to expect slave data"); // Continue with cheap tipping bucket
+    }
 
     IPAddress wgLocalIP;
-    wgLocalIP.fromString(WG_DEVICE_MASTER_LOCAL_IP_1);
+    wgLocalIP.fromString(WG_DEVICE_MASTER_LOCAL_IP_2); //! RECHECK THIS EVERYTIME COMPILE
     Serial.printf("wg ip: %s\n", wgLocalIP.toString());
 
-    bool wgOk = wg.begin(wgLocalIP, WG_DEVICE_MASTER_PRIVATE_KEY_1,
+    bool wgOk = wg.begin(wgLocalIP, WG_DEVICE_MASTER_PRIVATE_KEY_2, //! RECHECK THIS EVERYTIME COMPILE
                          WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
     if (wgOk)
         Serial.println("WireGuard successfully initialized on ESP32!");
@@ -140,7 +147,7 @@ void setup()
     display.begin();
     display.setHeaderTitle("BANDUNG-SEEDBED-1");
     display.setFooterText("v1.0.0");
-    display.setContainer1("TEMPERATURE", "0 C", DisplayColor::ORANGE, IconType::THERMO);
+    display.setContainer1("TEMPERATURE", "0 *C", DisplayColor::ORANGE, IconType::THERMO);
     display.setContainer2("HUMIDITY", "0 %RH", DisplayColor::BLUE, IconType::DROPLET);
     display.setContainer3("WIND SPEED", "0 m/s", DisplayColor::TEXT, IconType::WIND);
     display.setContainer4("WIND DIR", "North", DisplayColor::YELLOW, IconType::COMPASS);
@@ -154,7 +161,29 @@ void loop()
     ElegantOTA.loop();
     wifi.reconnect();
 
-    if (millis() - prevSystemLoggingMillis > 60000 * 5) // Every 5 minute
+    if (millis() - prevNTPMillis > 1000)
+    {
+        prevNTPMillis = millis();
+
+        struct tm timeinfo;
+        if (!getLocalTime(&timeinfo))
+        {
+            Serial.println("[ERROR] NTP Error");
+            WebSerial.println("[ERROR] NTP Error");
+        }
+        char timeHour[3];
+        char timeMinute[3];
+        char timeSecond[3];
+        strftime(timeHour, 3, "%H", &timeinfo);
+        strftime(timeMinute, 3, "%M", &timeinfo);
+        strftime(timeSecond, 3, "%S", &timeinfo);
+        display.setClock(atoi(timeHour), atoi(timeMinute), atoi(timeSecond));
+
+        display.setSignalStrength(wifi.getRssi());
+        display.refresh();
+    }
+
+    if (millis() - prevSystemLoggingMillis > 60000 * 60) // Every 1 hour
     {
         prevSystemLoggingMillis = millis();
 
@@ -179,7 +208,7 @@ void loop()
         }
     }
 
-    if (millis() - prevSamplingMillis > 60000) //  Every 1 minute
+    if (millis() - prevSamplingMillis > 60000 * 60) //  Every 1 hour
     {
         prevSamplingMillis = millis();
 
@@ -259,23 +288,6 @@ void loop()
 
         snprintf(buf, sizeof(buf), "%.1f mm/day", sensor.rainFall);
         display.updateContainerValue(5, buf);
-
-        struct tm timeinfo;
-        if (!getLocalTime(&timeinfo))
-        {
-            Serial.println("[ERROR] NTP Error");
-            WebSerial.println("[ERROR] NTP Error");
-        }
-        char timeHour[3];
-        char timeMinute[3];
-        char timeSecond[3];
-        strftime(timeHour, 3, "%H", &timeinfo);
-        strftime(timeMinute, 3, "%M", &timeinfo);
-        strftime(timeSecond, 3, "%S", &timeinfo);
-        display.setClock(atoi(timeHour), atoi(timeMinute), atoi(timeSecond));
-
-        display.setSignalStrength(wifi.getRssi());
-        display.refresh();
     }
 }
 
