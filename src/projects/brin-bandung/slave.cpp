@@ -1,21 +1,25 @@
 #include <Arduino.h>
+#include <ArduinoJson.h>
+#include <HTTPClient.h>
 #include <esp_task_wdt.h>
 #include <ModbusServerTCPasync.h>
 #include <ElegantOTA.h>
 #include <WebSerial.h>
 #include <Wire.h>
-#include <SHT2x.h> //TODO: REFACTOR TO SHT30D
+#include <WiFiClientSecure.h>
+#include <ClosedCube_SHT31D.h>
 #include <WireGuard-ESP32.h>
 
 #include "config.h" // .env
 #include "models.h"
+#include "../utils/parser.h"
 #include "transmitter/configs/wifi_module.h"
 #include "../utils/utils.h"
 
 const char *ssid = "NodeSensorWiFi1";
 const char *password = "muhammadnabiyullah";
-const char *hostname = "slave-bandung-persemaian-1";
-WiFiModule wifi(ssid, password, hostname);
+const char *hostname = "slave-bandung-persemaian-2";
+WiFiModule wifi(ssid, password, hostname, WIFI_POWER_19_5dBm);
 
 AsyncWebServer server(80);
 WireGuard wg;
@@ -28,27 +32,29 @@ ModbusMessage FC06(ModbusMessage request);
 
 const uint8_t pinAnemo = 9;
 const uint8_t pinRainfall = 10;
-const uint8_t pinWindDirectionRX = 5; // TODO: CHECK DOUBLE PLZ
-const uint8_t pinWindDirectionTX = 6; // TODO: CHECK DOUBLE PLZ
+const uint8_t pinWindDirectionRX = 4; //! 4 FOR CIMINYAK, 5 FOR CISANGKUY
+const uint8_t pinWindDirectionTX = 3; //! 3 FOR CIMINYAK, 6 FOR CISANGKUY
 const uint8_t pinSDA = 7;
 const uint8_t pinSCL = 8;
 
-SHT2x sht;
+ClosedCube_SHT31D sht3xd;
 
 const char *ntpServer = "pool.ntp.org";
 const long gmtOffset_sec = 25200;
 const int daylightOffset_sec = 0;
 
 volatile uint32_t counterAnemo = 0;
-const uint16_t debounceAnemo = 5000; // milisecond
+const uint16_t debounceAnemo = 5; // milisecond
 uint32_t prevDebounceAnemo = 0;
 
 volatile uint32_t counterRainfall = 0;
-const uint8_t debounceRainfall = 100; // milisecond
+const uint16_t debounceRainfall = 500; // milisecond
 uint32_t prevDebounceRainfall = 0;
 
 uint32_t prevTimeReading = 0;
+uint32_t prevWeatherReading = 0;
 uint32_t delayReading = 10000;
+const uint32_t weatherReadingInterval = 30000;
 bool shouldRestartNow = false;
 bool shouldResetRainfall = false;
 bool hasResetToday = false;
@@ -59,7 +65,8 @@ void ARDUINO_ISR_ATTR anemoInterruptHandler();
 void setup()
 {
     Serial.begin(115200);
-    // Serial1.begin(9600, SERIAL_8N1, pinWindDirectionTX, pinWindDirectionRX);
+    Serial.println("Starting data acquization!");
+    Serial1.begin(9600, SERIAL_8N1, pinWindDirectionRX, pinWindDirectionTX);
 
     if (wifi.begin())
         Serial.println(wifi.localIP());
@@ -68,25 +75,36 @@ void setup()
     esp_task_wdt_add(NULL);
 
     pinMode(pinAnemo, INPUT_PULLUP);
-    pinMode(pinRainfall, INPUT);
+    pinMode(pinRainfall, INPUT_PULLUP);
 
     ElegantOTA.setAutoReboot(true);
     ElegantOTA.begin(&server);
+    ElegantOTA.onEnd([](bool success)
+                     { if(success) esp_restart(); });
     WebSerial.begin(&server);
     server.begin();
 
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send(200, "text/plain", "Test Successful!"); });
+    server.on("/restart", HTTP_GET, [](AsyncWebServerRequest *request)
+              { esp_restart(); });
+
     Wire.begin(pinSDA, pinSCL);
-    if (!sht.begin())
+    sht3xd.begin(0x44); // I2C address can be 0x44 or 0x45
+    Serial.print("SHT3X serial #: ");
+    Serial.println(sht3xd.readSerialNumber());
+
+    if (sht3xd.periodicStart(SHT3XD_REPEATABILITY_HIGH, SHT3XD_FREQUENCY_10HZ) != SHT3XD_NO_ERROR)
     {
-        Serial.println("SHTX is not working");
-        WebSerial.println("SHTX is not working");
+        Serial.println("SHT3X periodic mode failed");
+        WebSerial.println("SHT3X periodic mode failed");
     }
 
     gpio_install_isr_service(ESP_INTR_FLAG_LEVEL1);
     detachInterrupt(pinAnemo);
     detachInterrupt(pinRainfall);
-    attachInterrupt(pinAnemo, anemoInterruptHandler, RISING);
-    attachInterrupt(pinRainfall, rainfallInterruptHandler, RISING);
+    attachInterrupt(digitalPinToInterrupt(pinAnemo), anemoInterruptHandler, FALLING);
+    attachInterrupt(digitalPinToInterrupt(pinRainfall), rainfallInterruptHandler, FALLING);
 
     uint8_t retryCounter = 0;
     struct tm timeinfo;
@@ -105,9 +123,9 @@ void setup()
     }
 
     IPAddress wgLocalIP;
-    wgLocalIP.fromString(WG_DEVICE_SLAVE_LOCAL_IP_1);
-    Serial.printf("wg ip: %s", wgLocalIP.toString());
-    bool wgOk = wg.begin(wgLocalIP, WG_DEVICE_SLAVE_PRIVATE_KEY_1,
+    wgLocalIP.fromString(WG_DEVICE_SLAVE_LOCAL_IP_2);
+    Serial.printf("wg ip: %s\n", wgLocalIP.toString());
+    bool wgOk = wg.begin(wgLocalIP, WG_DEVICE_SLAVE_PRIVATE_KEY_2,
                          WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
     if (wgOk)
     {
@@ -126,6 +144,9 @@ void setup()
     modbusData[12] = delayReading;
 }
 
+bool counterAnemoResetThisCycle = false;
+uint32_t prevDir = 0;
+
 void loop()
 {
     esp_task_wdt_reset();
@@ -137,29 +158,47 @@ void loop()
         prevTimeReading = millis();
 
         // === SENSOR DATA ===
-        // if (Serial1.available())
-        // {
-        //     String data = Serial1.readString(); // data yang diterima dari sensor berawalan tanda * dan diakhiri tanda #, contoh *1#
-        //     int a = data.indexOf("*");          // a adalah index tanda *
-        //     int b = data.indexOf("#");          // b adalah index tanda #
-        //     String resultWind = data.substring(a + 1, b);
-        //     modbusData[4] = Parser::parseStringWindDirection(resultWind);
-        // }
+        if (millis() - prevWeatherReading > weatherReadingInterval)
+        {
+            prevWeatherReading = millis();
 
-        // modbusData[0] = sht.getTemperature();
-        // modbusData[1] = sht.getHumidity();
+            {
+                String data = Serial1.readString(); // data yang diterima dari sensor berawalan tanda * dan diakhiri tanda #, contoh *1#
+                int a = data.indexOf("*");          // a adalah index tanda *
+                int b = data.indexOf("#");          // b adalah index tanda #
+                String resultWind = data.substring(a + 1, b);
+                modbusData[4] = Parser::parseStringWindDirection(resultWind);
+            }
+            // uint16_t windDirectionRegister = modbusData[4];
+            // if (fetchOpenMeteoWindDirection(windDirectionRegister))
+            // {
+            //     modbusData[4] = windDirectionRegister;
+            //     Serial.printf("Open-Meteo wind direction register: %u\n", modbusData[4]);
+            //     WebSerial.printf("Open-Meteo wind direction register: %u\n", modbusData[4]);
+            // }
+        }
 
-        float rainFallResult = counterRainfall * 0.7; // Return in mm/<time>
-        float anemoResult = (-0.0181 * float(counterAnemo / delayReading) * float(counterAnemo / delayReading)) +
-                            (1.3859 * float(counterAnemo / delayReading)) + 1.4055; // Return in m/s
-        modbusData[2] = uint16_t(rainFallResult * 10);                              // Store as uint and .1 precision
-        modbusData[3] = uint16_t(anemoResult * 10);                                 // Store as uint and .1 precision
+        SHT31D shtResult = sht3xd.periodicFetchData();
+        if (shtResult.error == SHT3XD_NO_ERROR)
+        {
+            modbusData[0] = Utils::toDeciU16(shtResult.t);  // temperature in 0.1 C
+            modbusData[1] = Utils::toDeciU16(shtResult.rh); // humidity in 0.1 %RH
+        }
+        else
+        {
+            Serial.printf("SHT3X read error: %d\n", shtResult.error);
+            WebSerial.printf("SHT3X read error: %d\n", shtResult.error);
+        }
 
-        modbusData[0] = random(1250);
-        modbusData[1] = random(1000);
-        // modbusData[2] = random(3000);
-        // modbusData[3] = random(7500);
-        modbusData[4] = random(8);
+        float rainFallResult = counterRainfall * 0.7;                                   // Return in mm/<time>
+        float rpm = float(counterAnemo / (delayReading / 1000.0));                      // Return in rotation/minute
+        float anemoResult = ((-0.0181 * (rpm * rpm))) + (1.3859 * float(rpm)) + 1.4055; // Return in m/s
+        modbusData[2] = uint16_t(rainFallResult * 10);                                  // Store as uint and .1 precision
+        if (anemoResult < 1.5)
+            modbusData[3] = 0;
+        else
+            modbusData[3] = uint16_t(anemoResult * 10); // Store as uint and .1 precision
+        counterAnemoResetThisCycle = false;
 
         // === SYSTEM LOG DATA ===
         uint32_t freeHeap = ESP.getFreeHeap();
@@ -184,7 +223,7 @@ void loop()
         delayReading = modbusData[12];
 
         if (shouldRestartNow)
-            ESP.restart();
+            esp_restart();
 
         if (shouldResetRainfall)
             counterRainfall = 0;
@@ -201,7 +240,6 @@ void loop()
         }
         if (hour == 0 || minute == 0)
             hasResetToday = false;
-        counterRainfall = 0; // Reset each cycle send
 
         // TODO: (OPTIONAL) STORE COUNTER AT EEPROM IN CASE OF WATCHDOG / RESET
     }
@@ -225,8 +263,7 @@ void ARDUINO_ISR_ATTR anemoInterruptHandler()
     }
 }
 
-ModbusMessage
-FC03(ModbusMessage request)
+ModbusMessage FC03(ModbusMessage request)
 {
     /**
      * @brief Info about modbus TCP frame
@@ -255,6 +292,11 @@ FC03(ModbusMessage request)
         WebSerial.printf("Req Slave Id: %d, FC: %d, Data: [%d, %d, %d, %d, %d]\n",
                          request.getServerID(), request.getFunctionCode(),
                          modbusData[addr + 0], modbusData[addr + 1], modbusData[addr + 2], modbusData[addr + 3], modbusData[addr + 4]);
+    }
+    if (!counterAnemoResetThisCycle)
+    {
+        counterAnemo = 0;
+        counterAnemoResetThisCycle = true;
     }
     return response;
 }
@@ -287,3 +329,140 @@ ModbusMessage FC06(ModbusMessage request)
 
     return response;
 }
+
+//=============================================== INTERRUPT TEST =======================================================
+// #include <Arduino.h>
+// #define ANEMO_PIN 9           // Change to your actual GPIO
+// #define RAIN_PIN 10 // Change to your actual GPIO
+// volatile uint32_t anemoPulseCount = 0;
+// volatile uint32_t rainPulseCount = 0;
+// uint32_t prevAnemoCount = 0;
+// void IRAM_ATTR anemoISR()
+// {
+//     if (millis() - prevAnemoCount > 500)
+//     {
+//         prevAnemoCount = millis();
+//         anemoPulseCount++;
+//     }
+// }
+// uint32_t prevRainCount = 0;
+// void IRAM_ATTR rainISR()
+// {
+//     if (millis() - prevRainCount > 100)
+//     {
+//         prevRainCount = millis();
+//         rainPulseCount++;
+//     }
+// }
+// void setup()
+// {
+//     Serial.begin(115200);
+//     pinMode(ANEMO_PIN, INPUT_PULLUP); // Most anemometers are open-collector/reed switch
+//     pinMode(RAIN_PIN, INPUT_PULLUP);  // Most anemometers are open-collector/reed switch
+//     gpio_install_isr_service(ESP_INTR_FLAG_LEVEL1);
+//     detachInterrupt(ANEMO_PIN);
+//     detachInterrupt(RAIN_PIN);
+//     attachInterrupt(
+//         digitalPinToInterrupt(ANEMO_PIN),
+//         anemoISR,
+//         FALLING // Try RISING or CHANGE if needed
+//     );
+//     attachInterrupt(
+//         digitalPinToInterrupt(RAIN_PIN),
+//         rainISR,
+//         FALLING // Try RISING or CHANGE if needed
+//     );
+//     Serial.println("Interrupt test started");
+// }
+// void loop()
+// {
+//     static uint32_t lastPrint = 0;
+//     if (millis() - lastPrint >= 1000)
+//     {
+//         detachInterrupt(RAIN_PIN);
+//         lastPrint = millis();
+//         noInterrupts();
+//         uint32_t anemoCount = anemoPulseCount;
+//         uint32_t rainCount = rainPulseCount;
+//         interrupts();
+//         Serial.printf("RAIN_PIN state: %d\n", digitalRead(RAIN_PIN));
+//         // Serial.printf("anemo: %lu | rain: %lu\n", anemoCount, rainCount);
+//     }
+// }
+
+// =============================================== I2C SCAN TEST =======================================================
+// #include <Arduino.h>
+// #include <Wire.h>
+// void setup()
+//{
+//    Wire.begin(7, 8);
+//    Serial.begin(115200);
+//    Serial.println("\nI2C Scanner");
+//}
+// void loop()
+//{
+//    byte error, address;
+//    int nDevices;
+//    Serial.println("Scanning...");
+//    nDevices = 0;
+//    for (address = 1; address < 127; address++)
+//    {
+//        Wire.beginTransmission(address);
+//        error = Wire.endTransmission();
+//        if (error == 0)
+//        {
+//            Serial.print("I2C device found at address 0x");
+//            if (address < 16)
+//            {
+//                Serial.print("0");
+//            }
+//            Serial.println(address, HEX);
+//            nDevices++;
+//        }
+//        else if (error == 4)
+//        {
+//            Serial.print("Unknow error at address 0x");
+//            if (address < 16)
+//            {
+//                Serial.print("0");
+//            }
+//            Serial.println(address, HEX);
+//        }
+//    }
+//    if (nDevices == 0)
+//    {
+//        Serial.println("No I2C devices found\n");
+//    }
+//    else
+//    {
+//        Serial.println("done\n");
+//    }
+//    delay(5000);
+//}
+
+// ================================== SERIAL TEST ==========================================
+
+// #include <Arduino.h>
+
+// void setup()
+// {
+//     Serial.begin(115200);
+//     Serial1.begin(9600, SERIAL_8N1, 4, 3); // RX=5, TX=6
+//     Serial.println("Starting Serial1 loopback test...");
+// }
+
+// void loop()
+// {
+
+//     if (Serial1.available())
+//     {
+//         String data = Serial1.readString();
+//         Serial.print("Serial1 received: ");
+//         Serial.println(data);
+//     }
+//     else
+//     {
+//         Serial.println("Serial1 available: NO");
+//     }
+//     delay(1000);
+// }
