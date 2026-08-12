@@ -302,10 +302,17 @@ void loop()
 
     if (millis() - lastLogADSChannel >= 200 && isCalibrationADS)
     {
-        Serial.printf("CH0: %d | CH1: %d | CH2: %d| CH3: %d\n",
-                      ads.read(0), ads.read(1), ads.read(2), ads.read(3));
-        WebSerial.printf("CH0: %d | CH1: %d | CH2: %d| CH3: %d\n",
-                         ads.read(0), ads.read(1), ads.read(2), ads.read(3));
+        volatile uint16_t cachedADS[4] = {0};
+        cachedADS[0] = ads.read(0);
+        cachedADS[1] = ads.read(1);
+        cachedADS[2] = ads.read(2);
+        cachedADS[3] = ads.read(3);
+
+        Serial.printf("CH0: %d | CH1: %d | CH2: %d | CH3: %d\n",
+                      cachedADS[0], cachedADS[1], cachedADS[2], cachedADS[3]);
+        WebSerial.printf("CH0: %d | CH1: %d | CH2: %d | CH3: %d\n",
+                         cachedADS[0], cachedADS[1], cachedADS[2], cachedADS[3]);
+        lastLogADSChannel = millis();
     }
 
     ElegantOTA.loop();
