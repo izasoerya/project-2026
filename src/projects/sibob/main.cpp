@@ -11,6 +11,7 @@
 #include "sensor/configs/dht_sensor.h"
 #include "sensor/configs/ads_sensor.h"
 #include "sensor/configs/ds18b20_sensor.h"
+#include "sensor/filters/moving_average.h"
 
 #include "bang-bang.h"
 #include "models.h"
@@ -63,41 +64,23 @@ const int daylightOffset_sec = 0;
 ADS1115Module ads(ADS1115_DEFAULT_ADDRESS, &Wire);
 
 DHTSensor dhtSensor(PIN_DHT);
-ADSSensor phSensor(1, "PH", CHANNEL_PH, &ads, [](float v)
-                   { return v; });
-ADSSensor soilHum(1, "Soil Humidity", CHANNEL_SOIL_HUM, &ads, [](float v)
-                  { return v; });
+TrimmedMovingAverage phFilter(20, 2);
+ADSSensor phSensor(1, "PH Soil", CHANNEL_PH,
+                   &ads, [](float v) -> float
+                   {  phFilter.filter(v); 
+                    return v; }); // Intercept with formula here
+TrimmedMovingAverage soilHumFilter(20, 2);
+ADSSensor soilHum(1, "Soil Humidity", CHANNEL_SOIL_HUM,
+                  &ads, [](float v) -> float
+                  { soilHumFilter.filter(v); 
+                    return v; }); // Intercept with formula here
 HX711 hx1;
 HX711 hx2;
 DS18B20Sensor ds(1, "WATER TEMP", PIN_DS18);
 
-SensorData sensors;
+static SensorData sensors;
 
-int publishSensorSnapshot()
-{
-    JsonDocument supabaseDoc;
-    supabaseDoc["temperature_soil"] = sensors.temperature_soil.value;
-    supabaseDoc["humidity_soil"] = sensors.humidity_soil.value;
-    supabaseDoc["ph"] = sensors.ph.value;
-    supabaseDoc["weight"] = (sensors.weight_breed.value + sensors.weight_yield.value) / 2.0;
-    supabaseDoc["temperature_air"] = sensors.temperature_air.value;
-    supabaseDoc["humidity_air"] = sensors.humidity_air.value;
-    supabaseDoc["device_id"] = sensors.id;
-
-    String payload;
-    int bytes = serializeJson(supabaseDoc, payload);
-
-    Serial.printf("Payload length: %d bytes\n", payload.length());
-    Serial.printf("Serialized: %d bytes\n", bytes);
-    for (int i = 0; i < payload.length() && i < 100; i++)
-    {
-        Serial.printf("%02X ", (uint8_t)payload[i]);
-    }
-    Serial.println();
-    Serial.printf("PAYLOAD: %s\n", payload.c_str());
-
-    return inet.send("%5BSIBOB%5D%20sensor", payload.c_str());
-}
+int publishSensorSnapshot();
 
 void setup()
 {
@@ -152,7 +135,6 @@ void setup()
 #if defined(SIBOB_1)
     IPAddress wgLocalIP;
     wgLocalIP.fromString(WG_DEVICE_LOCAL_IP_1);
-    Serial.printf("wg ip: %s\n", wgLocalIP.toString());
     bool wgOk = wg.begin(wgLocalIP, WG_DEVICE_PRIVATE_KEY_1,
                          WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
 #endif // SIBOB_1
@@ -160,7 +142,6 @@ void setup()
 #if defined(SIBOB_2)
     IPAddress wgLocalIP;
     wgLocalIP.fromString(WG_DEVICE_LOCAL_IP_2);
-    Serial.printf("wg ip: %s\n", wgLocalIP.toString());
     bool wgOk = wg.begin(wgLocalIP, WG_DEVICE_PRIVATE_KEY_2,
                          WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
 #endif // SIBOB_2
@@ -229,7 +210,7 @@ void loop()
         lastLogLocal = millis();
     }
 
-    if (millis() - lastUpdate >= 20000)
+    if (millis() - lastUpdate >= 60000)
     {
 #if defined(SIBOB_1)
         sensors.id = 1;
@@ -240,9 +221,6 @@ void loop()
         sensors.weight_breed.value = weightReading(hx1);
         sensors.weight_yield.value = weightReading(hx2);
 #endif
-        WebSerial.printf("Weight: %.1f\n",
-                         (sensors.weight_breed.value * 0.5 + sensors.weight_yield.value * 0.5));
-
         sensors.temperature_air.value = dhtSensor.getTemperature();
         sensors.humidity_air.value = dhtSensor.getHumidity();
         sensors.temperature_soil.value = ds.read();
@@ -272,4 +250,30 @@ void loop()
     }
 
     ElegantOTA.loop();
+}
+
+int publishSensorSnapshot()
+{
+    JsonDocument supabaseDoc;
+    supabaseDoc["temperature_soil"] = sensors.temperature_soil.value;
+    supabaseDoc["humidity_soil"] = sensors.humidity_soil.value;
+    supabaseDoc["ph"] = sensors.ph.value;
+    supabaseDoc["weight"] = (sensors.weight_breed.value + sensors.weight_yield.value) / 2.0;
+    supabaseDoc["temperature_air"] = sensors.temperature_air.value;
+    supabaseDoc["humidity_air"] = sensors.humidity_air.value;
+    supabaseDoc["device_id"] = sensors.id;
+
+    String payload;
+    int bytes = serializeJson(supabaseDoc, payload);
+
+    Serial.printf("Payload length: %d bytes\n", payload.length());
+    Serial.printf("Serialized: %d bytes\n", bytes);
+    for (int i = 0; i < payload.length() && i < 100; i++)
+    {
+        Serial.printf("%02X ", (uint8_t)payload[i]);
+    }
+    Serial.println();
+    Serial.printf("PAYLOAD: %s\n", payload.c_str());
+
+    return inet.send("%5BSIBOB%5D%20sensor", payload.c_str());
 }
