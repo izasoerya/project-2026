@@ -5,8 +5,8 @@
 #include <WebSerial.h>
 #include <HX711.h>
 #include <WireGuard-ESP32.h>
-
 #include "esp_task_wdt.h"
+
 #include "transmitter/configs/wifi_module.h"
 #include "sensor/configs/dht_sensor.h"
 #include "sensor/configs/ads_sensor.h"
@@ -18,9 +18,19 @@
 #include "config.h"
 #include "hx711_reading.h"
 
+/**
+ * @brief Device Configuration
+ *
+ * Uncomment the devivce that will be build
+ */
 // #define SIBOB_1
 #define SIBOB_2
 
+/**
+ * @brief Pinout Configuration
+ *
+ * Change to appropriate pin
+ */
 #define PIN_FAN 0
 #define PIN_MIST 1
 #define PIN_DHT 2
@@ -33,9 +43,22 @@
 #define PIN_DS18 9
 #define PIN_CLK 10
 
+/**
+ * @brief ADS Channel Configuration
+ *
+ */
 #define CHANNEL_PH 0
 #define CHANNEL_SOIL_HUM 1
 
+/**
+ * @brief Pinout Configuration
+ *
+ * Change setpoint of bang-bang control
+ * @param TOP_TEMP_SET -> set top cap temperature for fan
+ * @param BOT_TEMP_SET -> set bot cap temperature for fan
+ * @param TOP_HUM_SET -> set top cap humidity for mist
+ * @param BOT_HUM_SET -> set bot cap humiidty for mist
+ */
 #define TOP_TEMP_SET 25
 #define BOT_TEMP_SET 10
 #define TOP_HUM_SET 90
@@ -64,11 +87,25 @@ const int daylightOffset_sec = 0;
 ADS1115Module ads(ADS1115_DEFAULT_ADDRESS, &Wire);
 
 DHTSensor dhtSensor(PIN_DHT);
+
+/**
+ * @brief PH Sensor Configuration
+ *
+ * PH is read using ads and return the value in adc-16 bit.
+ * Trimmed moving average is implemented in this sensor. To disable directly return v.
+ */
 TrimmedMovingAverage phFilter(20, 2);
 ADSSensor phSensor(1, "PH Soil", CHANNEL_PH,
                    &ads, [](float v) -> float
                    {  phFilter.filter(v); 
                     return v; }); // Intercept with formula here
+
+/**
+ * @brief Soil Humidity Sensor Configuration
+ *
+ * Soil Humidity is read using ads and return the value in adc-16 bit.
+ * Trimmed moving average is implemented in this sensor. To disable directly return v.
+ */
 TrimmedMovingAverage soilHumFilter(20, 2);
 ADSSensor soilHum(1, "Soil Humidity", CHANNEL_SOIL_HUM,
                   &ads, [](float v) -> float
@@ -79,6 +116,8 @@ HX711 hx2;
 DS18B20Sensor ds(1, "WATER TEMP", PIN_DS18);
 
 static SensorData sensors;
+static bool isCalibrationADS = false;
+static bool isTransmitSupabase = true;
 
 int publishSensorSnapshot();
 
@@ -98,6 +137,18 @@ void setup()
     ElegantOTA.begin(&server);
     ElegantOTA.setAutoReboot(true);
     WebSerial.begin(&server, "/webserial");
+    WebSerial.onMessage([&](uint8_t *data, size_t len)
+                        {
+    String d = "";
+    for(size_t i=0; i < len; i++){
+      d += char(data[i]);
+    }
+    if (d == "ADS_CALIBRATE") {isCalibrationADS = true;}
+    else if (d == "NORMAL") {isCalibrationADS = false;}
+    else if (d == "DISABLE_SUPABASE") {isTransmitSupabase = false;}
+    else if (d == "ENABLE_SUPABASE") {isTransmitSupabase = true;}
+    WebSerial.println(d); });
+
     Wire.begin(PIN_SDA, PIN_SCL);
 
     pinMode(PIN_FAN, OUTPUT);
@@ -171,17 +222,13 @@ void setup()
 
 uint32_t lastUpdate = 0;
 uint32_t lastLogLocal = 0;
+uint32_t lastLogADSChannel = 0;
 uint32_t lastTimerHeater = 0;
 
 void loop()
 {
     inet.reconnect();
     esp_task_wdt_reset();
-
-    static const BangBangController bang(
-        BangBangConfig{TOP_TEMP_SET, BOT_TEMP_SET, // top temp, bot temp
-                       TOP_HUM_SET, BOT_HUM_SET},  // top hum, bot hum
-        ActuatorConfig{0, 1, 3});                  // pin fan, pin mist, pin heater
 
     if (millis() - lastLogLocal >= 5000)
     {
@@ -194,9 +241,6 @@ void loop()
         sensors.weight_breed.value = weightReading(hx1);
         sensors.weight_yield.value = weightReading(hx2);
 #endif
-        WebSerial.printf("Weight: %.1f\n",
-                         (sensors.weight_breed.value * 0.5 + sensors.weight_yield.value * 0.5));
-
         sensors.temperature_air.value = dhtSensor.getTemperature();
         sensors.humidity_air.value = dhtSensor.getHumidity();
         sensors.temperature_soil.value = ds.read();
@@ -206,11 +250,12 @@ void loop()
         String buffer;
         serializeJsonPretty(sensors.toJsonDocument(), buffer);
         Serial.println(buffer);
+        WebSerial.println(buffer);
 
         lastLogLocal = millis();
     }
 
-    if (millis() - lastUpdate >= 60000)
+    if (millis() - lastUpdate >= 60000 && isTransmitSupabase)
     {
 #if defined(SIBOB_1)
         sensors.id = 1;
@@ -230,11 +275,17 @@ void loop()
         int response = publishSensorSnapshot();
         Serial.printf("Supabase Res Code: %d\n", response);
         WebSerial.printf("Supabase Res Code: %d\n", response);
+
         lastUpdate = millis();
     }
 
     if (millis() - lastTimerHeater >= 10000)
     {
+        static const BangBangController bang(
+            BangBangConfig{TOP_TEMP_SET, BOT_TEMP_SET, // top temp, bot temp
+                           TOP_HUM_SET, BOT_HUM_SET},  // top hum, bot hum
+            ActuatorConfig{0, 1, 3});                  // pin fan, pin mist, pin heater
+
         static bool flipFlag = false;
         bang.control(
             sensors.temperature_soil.value,
@@ -247,6 +298,14 @@ void loop()
 
         flipFlag = !flipFlag;
         lastTimerHeater = millis();
+    }
+
+    if (millis() - lastLogADSChannel >= 200 && isCalibrationADS)
+    {
+        Serial.printf("CH0: %d | CH1: %d | CH2: %d| CH3: %d\n",
+                      ads.read(0), ads.read(1), ads.read(2), ads.read(3));
+        WebSerial.printf("CH0: %d | CH1: %d | CH2: %d| CH3: %d\n",
+                         ads.read(0), ads.read(1), ads.read(2), ads.read(3));
     }
 
     ElegantOTA.loop();
