@@ -11,8 +11,13 @@ WiFiBundle::~WiFiBundle()
     delete _transport;
 }
 
-bool WiFiBundle::begin(bool restartOnFail)
+bool WiFiBundle::begin(
+    const std::function<void()> &onProgress,
+    const std::function<void()> &onTimeout)
 {
+    this->onProgress = &onProgress;
+    this->onTimeout = &onTimeout;
+
     WiFi.mode(WIFI_STA);
     WiFi.hostname(_hostname);
     WiFi.begin(_ssid, _password);
@@ -26,16 +31,10 @@ bool WiFiBundle::begin(bool restartOnFail)
         delay(500);
         counter++;
         if (counter > 40) // 20 second
-            if (restartOnFail)
-                esp_restart();
-            else
-                return false;
+            onTimeout();
     }
     if (!_setupMDNS())
-        if (restartOnFail)
-            esp_restart();
-        else
-            return false;
+        onTimeout();
 
     return true;
 }
@@ -61,7 +60,7 @@ void WiFiBundle::reconnect()
 
     WiFi.disconnect(true); // force clean state
     delay(100);
-    begin();
+    begin(*onProgress, *onTimeout);
 }
 
 int WiFiBundle::post(const char *url, const char *payload)

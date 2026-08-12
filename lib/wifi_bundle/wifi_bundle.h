@@ -16,7 +16,9 @@ public:
         wifi_power_t *txPower = nullptr);
     ~WiFiBundle();
 
-    bool begin(bool restartOnFail = true);
+    bool begin(
+        const std::function<void()> &onProgress,
+        const std::function<void()> &onTimeout);
     const char *localIP();
     int8_t getdBm();
     void reconnect();
@@ -38,6 +40,9 @@ private:
 
     uint8_t _counterReset = 0;
     const uint8_t _maxRetry = 3;
+
+    const std::function<void()> *onProgress = nullptr;
+    const std::function<void()> *onTimeout = nullptr;
 
     bool _setupMDNS()
     {

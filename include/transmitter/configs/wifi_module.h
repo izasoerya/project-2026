@@ -45,9 +45,10 @@ public:
         supabaseConfig = supabaseTransport;
     }
 
-    bool begin()
+    bool begin(const std::function<void()> &onProgress,
+               const std::function<void()> &onTimeout)
     {
-        if (_inet.begin(true)) // Restart on fail set to true
+        if (_inet.begin(onProgress, onTimeout)) // Restart on fail set to true
             return true;
         return false;
     }
