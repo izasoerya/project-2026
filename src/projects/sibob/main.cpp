@@ -268,7 +268,7 @@ void loop()
         const float W1_ZERO = 206441;    // Baseline W1
         const float W2_ZERO = 419842;    // Baseline W2
         const float CAL_FACTOR = 195.88; // units/gram
-        const float TARE = -12;
+        const float TARE = -17.74;
 #if defined(SIBOB_1)
         float delta = (w1_raw - W1_ZERO) + (w2_raw - W2_ZERO);
         return delta / CAL_FACTOR; // weight in grams
