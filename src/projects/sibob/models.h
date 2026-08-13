@@ -58,6 +58,39 @@ struct SensorData
         doc["status"] = status;
         return doc;
     }
+
+    const char *toJson()
+    {
+        JsonDocument doc;
+        doc["device_id"] = id;
+        doc["temperature_soil"] = temperature_soil.value;
+        doc["humidity_soil"] = humidity_soil.value;
+        doc["ph"] = ph.value;
+        doc["weight"] = weight_breed.value;
+        doc["temperature_air"] = temperature_air.value;
+        doc["humidity_air"] = humidity_air.value;
+
+        String status = "";
+        if (temperature_soil.status != 1)
+            status += "T";
+        if (humidity_soil.status != 1)
+            status += "H";
+        if (ph.status != 1)
+            status += "P";
+        if (weight_breed.status != 1)
+            status += "W";
+        if (weight_yield.status != 1)
+            status += "Y";
+        if (temperature_air.status != 1)
+            status += "A";
+        if (humidity_air.status != 1)
+            status += "U";
+        doc["status"] = status;
+
+        static char buffer[256];
+        serializeJsonPretty(doc, buffer);
+        return buffer;
+    }
 };
 
 struct ActuatorData
