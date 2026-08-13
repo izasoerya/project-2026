@@ -3,7 +3,6 @@
 #include <ElegantOTA.h>
 #include <ESPAsyncWebServer.h>
 #include <WebSerial.h>
-#include <HX711.h>
 #include <WireGuard-ESP32.h>
 #include "esp_task_wdt.h"
 
@@ -11,12 +10,12 @@
 #include "sensor/configs/dht_sensor.h"
 #include "sensor/configs/ads_sensor.h"
 #include "sensor/configs/ds18b20_sensor.h"
+#include "sensor/configs/hx711_sensor.h"
 #include "sensor/filters/moving_average.h"
 
 #include "bang-bang.h"
 #include "models.h"
 #include "config.h"
-#include "hx711_reading.h"
 
 /**
  * @brief Device Configuration
@@ -111,15 +110,38 @@ ADSSensor soilHum(1, "Soil Humidity", CHANNEL_SOIL_HUM,
                   &ads, [](float v) -> float
                   { soilHumFilter.filter(v); 
                     return v; }); // Intercept with formula here
-HX711 hx1;
-HX711 hx2;
+
+/**
+ * @brief Weight Sensor 1 Configuration
+ *
+ * Weight Sensor is read, change the interceptor formula for calibrate.
+ */
+TrimmedMovingAverage weight1Filter(20, 2);
+HX711Sensor hx1(1, "Weight 1",
+                PIN_DT_BREED, PIN_CLK,
+                [](float v) -> float
+                { 
+                    weight1Filter.filter(v);
+                    return v; }); // Intercept with formula here
+
+/**
+ * @brief Weight Sensor 2 Configuration
+ *
+ * Weight Sensor is read, change the interceptor formula for calibrate.
+ */
+TrimmedMovingAverage weight2Filter(20, 2);
+HX711Sensor hx2(1, "Weight 2",
+                PIN_DT_YIELD, PIN_CLK,
+                [](float v) -> float
+                { 
+                    weight2Filter.filter(v);
+                    return v; }); // Intercept with formula here
+
 DS18B20Sensor ds(1, "WATER TEMP", PIN_DS18);
 
 static SensorData sensors;
 static bool isCalibrationADS = false;
 static bool isTransmitSupabase = true;
-
-int publishSensorSnapshot();
 
 void setup()
 {
@@ -137,17 +159,22 @@ void setup()
     ElegantOTA.begin(&server);
     ElegantOTA.setAutoReboot(true);
     WebSerial.begin(&server, "/webserial");
-    WebSerial.onMessage([&](uint8_t *data, size_t len)
-                        {
-    String d = "";
-    for(size_t i=0; i < len; i++){
-      d += char(data[i]);
-    }
-    if (d == "ADS_CALIBRATE") {isCalibrationADS = true;}
-    else if (d == "NORMAL") {isCalibrationADS = false;}
-    else if (d == "DISABLE_SUPABASE") {isTransmitSupabase = false;}
-    else if (d == "ENABLE_SUPABASE") {isTransmitSupabase = true;}
-    WebSerial.println(d); });
+    WebSerial.onMessage(
+        [&](uint8_t *data, size_t len)
+        {
+            String d = "";
+            for (size_t i = 0; i < len; i++)
+                d += char(data[i]);
+            if (d == "ADS_CALIBRATE")
+                isCalibrationADS = true;
+            else if (d == "NORMAL")
+                isCalibrationADS = false;
+            else if (d == "DISABLE_SUPABASE")
+                isTransmitSupabase = false;
+            else if (d == "ENABLE_SUPABASE")
+                isTransmitSupabase = true;
+            WebSerial.println(d);
+        });
 
     Wire.begin(PIN_SDA, PIN_SCL);
 
@@ -160,7 +187,6 @@ void setup()
                 String buffer;
                 serializeJsonPretty(sensors.toJsonDocument(), buffer);
                 request->send(200, "application/json", buffer); });
-
     server.on("/restart", HTTP_GET, [](AsyncWebServerRequest *request)
               { 
                 request->send(200, "text/plain", "Restarting now...");
@@ -209,8 +235,8 @@ void setup()
     }
 
     sensors.temperature_air.status = dhtSensor.begin();
-    sensors.weight_breed.status = weightBegin(hx1, PIN_DT_BREED, PIN_CLK);
-    sensors.weight_yield.status = weightBegin(hx2, PIN_DT_YIELD, PIN_CLK);
+    sensors.weight_breed.status = hx1.begin();
+    sensors.weight_yield.status = hx2.begin();
     sensors.temperature_soil.status = ds.begin();
     sensors.ph.status = ads.begin(ADS1115_PGA_2P048); // It's just ads
 
@@ -234,12 +260,12 @@ void loop()
     {
 #if defined(SIBOB_1)
         sensors.id = 1;
-        sensors.weight_breed.value = weightReading(hx1);
-        sensors.weight_yield.value = weightReading(hx2);
+        sensors.weight_breed.value = hx1.read();
+        sensors.weight_yield.value = hx2.read();
 #elif defined(SIBOB_2)
         sensors.id = 2;
-        sensors.weight_breed.value = weightReading(hx1);
-        sensors.weight_yield.value = weightReading(hx2);
+        sensors.weight_breed.value = hx1.read();
+        sensors.weight_yield.value = hx2.read();
 #endif
         sensors.temperature_air.value = dhtSensor.getTemperature();
         sensors.humidity_air.value = dhtSensor.getHumidity();
@@ -247,10 +273,8 @@ void loop()
         sensors.humidity_soil.value = soilHum.read();
         sensors.ph.value = phSensor.read();
 
-        String buffer;
-        serializeJsonPretty(sensors.toJsonDocument(), buffer);
-        Serial.println(buffer);
-        WebSerial.println(buffer);
+        Serial.println(sensors.toJson());
+        WebSerial.println(sensors.toJson());
 
         lastLogLocal = millis();
     }
@@ -259,12 +283,12 @@ void loop()
     {
 #if defined(SIBOB_1)
         sensors.id = 1;
-        sensors.weight_breed.value = weightReading(hx1);
-        sensors.weight_yield.value = weightReading(hx2);
+        sensors.weight_breed.value = hx1.read();
+        sensors.weight_yield.value = hx2.read();
 #elif defined(SIBOB_2)
         sensors.id = 2;
-        sensors.weight_breed.value = weightReading(hx1);
-        sensors.weight_yield.value = weightReading(hx2);
+        sensors.weight_breed.value = hx1.read();
+        sensors.weight_yield.value = hx2.read();
 #endif
         sensors.temperature_air.value = dhtSensor.getTemperature();
         sensors.humidity_air.value = dhtSensor.getHumidity();
@@ -272,7 +296,8 @@ void loop()
         sensors.humidity_soil.value = soilHum.read();
         sensors.ph.value = phSensor.read();
 
-        int response = publishSensorSnapshot();
+        const char *jsonString = sensors.toJson();
+        int response = inet.send("%5BSIBOB%5D%20sensor", jsonString);
         Serial.printf("Supabase Res Code: %d\n", response);
         WebSerial.printf("Supabase Res Code: %d\n", response);
 
@@ -316,30 +341,4 @@ void loop()
     }
 
     ElegantOTA.loop();
-}
-
-int publishSensorSnapshot()
-{
-    JsonDocument supabaseDoc;
-    supabaseDoc["temperature_soil"] = sensors.temperature_soil.value;
-    supabaseDoc["humidity_soil"] = sensors.humidity_soil.value;
-    supabaseDoc["ph"] = sensors.ph.value;
-    supabaseDoc["weight"] = (sensors.weight_breed.value + sensors.weight_yield.value) / 2.0;
-    supabaseDoc["temperature_air"] = sensors.temperature_air.value;
-    supabaseDoc["humidity_air"] = sensors.humidity_air.value;
-    supabaseDoc["device_id"] = sensors.id;
-
-    String payload;
-    int bytes = serializeJson(supabaseDoc, payload);
-
-    Serial.printf("Payload length: %d bytes\n", payload.length());
-    Serial.printf("Serialized: %d bytes\n", bytes);
-    for (int i = 0; i < payload.length() && i < 100; i++)
-    {
-        Serial.printf("%02X ", (uint8_t)payload[i]);
-    }
-    Serial.println();
-    Serial.printf("PAYLOAD: %s\n", payload.c_str());
-
-    return inet.send("%5BSIBOB%5D%20sensor", payload.c_str());
 }
