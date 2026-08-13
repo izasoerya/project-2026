@@ -149,6 +149,8 @@ void setup()
     esp_task_wdt_init(30, true);
     esp_task_wdt_add(NULL);
 
+    analogWriteFrequency(500);
+
     Serial.begin(115200);
     inet.begin(
         []() -> void
