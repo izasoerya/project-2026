@@ -97,7 +97,7 @@ public:
         }
         else
         {
-            analogWrite(_configActuator.pinHeater, 30);
+            analogWrite(_configActuator.pinHeater, 10);
             Serial.print("HEATER IS ON  pin: ");
             Serial.println(_configActuator.pinHeater);
         }
