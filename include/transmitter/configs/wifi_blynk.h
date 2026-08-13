@@ -45,7 +45,11 @@ public:
 
     bool begin()
     {
-        _wifi.begin();
+        _wifi.begin(
+            []()
+            { Serial.print("."); },
+            []()
+            { esp_restart(); });
         Blynk.config(_authToken);
         Blynk.connect();
         return true;
