@@ -22,8 +22,8 @@
  *
  * Uncomment the devivce that will be build
  */
-// #define SIBOB_1
-#define SIBOB_2
+#define SIBOB_1
+// #define SIBOB_2
 
 /**
  * @brief Pinout Configuration
@@ -270,10 +270,8 @@ void loop()
         const float CAL_FACTOR = 195.88; // units/gram
         const float TARE = -17.74;
 #if defined(SIBOB_1)
-        float delta = (w1_raw - W1_ZERO) + (w2_raw - W2_ZERO);
-        return delta / CAL_FACTOR; // weight in grams
         sensors.id = 1;
-        sensors.weight_breed.value = ((hx1.read() - W1_ZERO) + (hx2.read() - W2_ZERO)) / CAL_FACTOR;
+        sensors.weight_breed.value = (((hx1.read() - W1_ZERO) + (hx2.read() - W2_ZERO)) / CAL_FACTOR) + TARE;
         sensors.weight_yield.value = hx2.read();
 #elif defined(SIBOB_2)
         sensors.id = 2;
