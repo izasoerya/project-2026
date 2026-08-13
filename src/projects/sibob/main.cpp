@@ -63,8 +63,8 @@
 #define TOP_HUM_SET 90
 #define BOT_HUM_SET 40
 
-const char *ssid = "Bengkel Inovasi Indonesia";
-const char *password = "EKSPEKTASI";
+const char *ssid = "NodeSensorWiFi1";
+const char *password = "muhammadnabiyullah";
 #if defined(SIBOB_1)
 const char *hostname = "sibob-1";
 #endif // SIBOB_1
@@ -141,6 +141,7 @@ DS18B20Sensor ds(1, "WATER TEMP", PIN_DS18);
 
 static SensorData sensors;
 static bool isCalibrationADS = false;
+static bool isCalibrationHX711 = false;
 static bool isTransmitSupabase = true;
 
 void setup()
@@ -167,12 +168,17 @@ void setup()
                 d += char(data[i]);
             if (d == "ADS_CALIBRATE")
                 isCalibrationADS = true;
-            else if (d == "NORMAL")
-                isCalibrationADS = false;
+            else if (d == "HX711_CALIBRATE")
+                isCalibrationHX711 = true;
             else if (d == "DISABLE_SUPABASE")
                 isTransmitSupabase = false;
             else if (d == "ENABLE_SUPABASE")
                 isTransmitSupabase = true;
+            else if (d == "NORMAL")
+            {
+                isCalibrationHX711 = false;
+                isCalibrationADS = false;
+            }
             WebSerial.println(d);
         });
 
@@ -248,7 +254,8 @@ void setup()
 
 uint32_t lastUpdate = 0;
 uint32_t lastLogLocal = 0;
-uint32_t lastLogADSChannel = 0;
+uint32_t lastLogADSDebug = 0;
+uint32_t lastLogHX711Debug = 0;
 uint32_t lastTimerHeater = 0;
 
 void loop()
@@ -256,15 +263,21 @@ void loop()
     inet.reconnect();
     esp_task_wdt_reset();
 
-    if (millis() - lastLogLocal >= 5000)
+    if (millis() - lastLogLocal >= 5000 && !(isCalibrationADS || isCalibrationHX711))
     {
+        const float W1_ZERO = 206441;    // Baseline W1
+        const float W2_ZERO = 419842;    // Baseline W2
+        const float CAL_FACTOR = 195.88; // units/gram
+        const float TARE = -12;
 #if defined(SIBOB_1)
+        float delta = (w1_raw - W1_ZERO) + (w2_raw - W2_ZERO);
+        return delta / CAL_FACTOR; // weight in grams
         sensors.id = 1;
-        sensors.weight_breed.value = hx1.read();
+        sensors.weight_breed.value = ((hx1.read() - W1_ZERO) + (hx2.read() - W2_ZERO)) / CAL_FACTOR;
         sensors.weight_yield.value = hx2.read();
 #elif defined(SIBOB_2)
         sensors.id = 2;
-        sensors.weight_breed.value = hx1.read();
+        sensors.weight_breed.value = (((hx1.read() - W1_ZERO) + (hx2.read() - W2_ZERO)) / CAL_FACTOR) + TARE;
         sensors.weight_yield.value = hx2.read();
 #endif
         sensors.temperature_air.value = dhtSensor.getTemperature();
@@ -273,8 +286,9 @@ void loop()
         sensors.humidity_soil.value = soilHum.read();
         sensors.ph.value = phSensor.read();
 
-        Serial.println(sensors.toJson());
-        WebSerial.println(sensors.toJson());
+        const char *logSensor = sensors.toJson();
+        Serial.println(logSensor);
+        WebSerial.println(logSensor);
 
         lastLogLocal = millis();
     }
@@ -325,7 +339,7 @@ void loop()
         lastTimerHeater = millis();
     }
 
-    if (millis() - lastLogADSChannel >= 200 && isCalibrationADS)
+    if (millis() - lastLogADSDebug >= 200 && isCalibrationADS)
     {
         volatile uint16_t cachedADS[4] = {0};
         cachedADS[0] = ads.read(0);
@@ -337,7 +351,17 @@ void loop()
                       cachedADS[0], cachedADS[1], cachedADS[2], cachedADS[3]);
         WebSerial.printf("CH0: %d | CH1: %d | CH2: %d | CH3: %d\n",
                          cachedADS[0], cachedADS[1], cachedADS[2], cachedADS[3]);
-        lastLogADSChannel = millis();
+        lastLogADSDebug = millis();
+    }
+
+    if (millis() - lastLogHX711Debug >= 200 && isCalibrationHX711)
+    {
+        Serial.printf("W1: %.1f | W2: %.1f\n",
+                      hx1.readRaw(), hx2.readRaw());
+        WebSerial.printf("W1: %.1f | W2: %.1f\n",
+                         hx1.readRaw(), hx2.readRaw());
+
+        lastLogHX711Debug = millis();
     }
 
     ElegantOTA.loop();

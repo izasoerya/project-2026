@@ -41,7 +41,12 @@ public:
 
     float read() override
     {
-        return _interceptor(_sc.read_average(15));
+        return _interceptor(_sc.read());
+    }
+
+    float readRaw()
+    {
+        return _sc.read();
     }
 };
 
