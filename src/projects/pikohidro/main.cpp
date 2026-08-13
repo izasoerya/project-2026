@@ -61,7 +61,7 @@ ADSSensor turbiditySensor(
     ADS_CHANNEL_TURBIDITY, &ads,
     [](float value) -> float
     {
-        float ntu = 0.1711493f * value - 488.5873f;
+        float ntu = (-1120.4 * pow(value, 2)) + (5742.3 * value) - 4352.9;
         return ntu < 0 ? 0.0f : ntu;
     });
 
@@ -87,12 +87,9 @@ const long gmtOffset_sec = 25200;
 const int daylightOffset_sec = 0;
 
 AppState state = AppState::NORMAL_MODE;
-uint64_t prevSendBlynk = 0;
-uint64_t prevSampling = 0;
-uint64_t prevSensorLog = 0;
 uint8_t adsSensorCounter = 0;
 AsyncWebServer server(80);
-int16_t arrayADS[3];
+float arrayADS[3];
 
 // #define CALIBRATION
 
@@ -166,6 +163,11 @@ void setup()
 
 #ifndef CALIBRATION
 
+uint32_t prevSendBlynk = 0;
+uint32_t prevSampling = 0;
+uint32_t prevSensorLog = 0;
+uint32_t prevLCDLog = 0;
+
 void loop()
 {
     blynk.run();
@@ -212,28 +214,8 @@ void loop()
                          tdsSensor.readRawVoltage(), phSensor.readRawVoltage(), turbiditySensor.readRawVoltage());
     }
 
-    if (millis() - prevSendBlynk > 30000)
+    if (millis() - prevLCDLog > 3000)
     {
-        const char *sensorString = sensor.toString();
-        Serial.println(sensorString);
-        WebSerial.println(sensorString);
-
-        PikohidroSystemEntity system{
-            .freeHeap = ESP.getFreeHeap(),
-            .largestFreeBlock = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT),
-            .minFreeHeap = ESP.getMinFreeHeap(),
-            .lastResetReason = esp_reset_reason(),
-        };
-        const char *systemString = system.toString();
-        Serial.println(systemString);
-        WebSerial.println(systemString);
-
-        blynk.send(BLYNK_TURBIDITY_PIN, sensor.waterTurbidity);
-        blynk.send(BLYNK_WATER_PH_PIN, sensor.waterPH);
-        blynk.send(BLYNK_TDS_PIN, sensor.waterTDS);
-        blynk.send(BLYNK_POWER_IN_PIN, sensor.powerIn);
-        blynk.send(BLYNK_POWER_OUT_PIN, sensor.powerOut);
-
         lcd.clear();
         lcd.setCursor(0, 0);
         lcd.print("===== PIKOHIDRO =====");
@@ -261,6 +243,31 @@ void loop()
         lcd.setCursor(10, 3);
         lcd.write(byte(5));
         lcd.printf("O:%.1fW", abs(sensor.powerOut));
+
+        prevLCDLog = millis();
+    }
+
+    if (millis() - prevSendBlynk > 30000)
+    {
+        const char *sensorString = sensor.toString();
+        Serial.println(sensorString);
+        WebSerial.println(sensorString);
+
+        PikohidroSystemEntity system{
+            .freeHeap = ESP.getFreeHeap(),
+            .largestFreeBlock = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT),
+            .minFreeHeap = ESP.getMinFreeHeap(),
+            .lastResetReason = esp_reset_reason(),
+        };
+        const char *systemString = system.toString();
+        Serial.println(systemString);
+        WebSerial.println(systemString);
+
+        blynk.send(BLYNK_TURBIDITY_PIN, sensor.waterTurbidity);
+        blynk.send(BLYNK_WATER_PH_PIN, sensor.waterPH);
+        blynk.send(BLYNK_TDS_PIN, sensor.waterTDS);
+        blynk.send(BLYNK_POWER_IN_PIN, sensor.powerIn);
+        blynk.send(BLYNK_POWER_OUT_PIN, sensor.powerOut);
 
         prevSendBlynk = millis();
     }
