@@ -36,12 +36,13 @@ public:
         _sc.begin(_pinDT, _pinCLK);
         _sc.set_scale(0);
         _sc.set_offset(0);
+        _sc.tare();
         return true;
     }
 
     float read() override
     {
-        return _interceptor(_sc.read());
+        return _interceptor(_sc.read_median(7));
     }
 
     float readRaw()
