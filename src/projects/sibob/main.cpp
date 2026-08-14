@@ -22,8 +22,8 @@
  *
  * Uncomment the devivce that will be build
  */
-#define SIBOB_1
-// #define SIBOB_2
+// #define SIBOB_1
+#define SIBOB_2
 
 /**
  * @brief Pinout Configuration
@@ -116,12 +116,12 @@ ADSSensor soilHum(1, "Soil Humidity", CHANNEL_SOIL_HUM,
  *
  * Weight Sensor is read, change the interceptor formula for calibrate.
  */
-TrimmedMovingAverage weight1Filter(20, 2);
+// TrimmedMovingAverage weight1Filter(20, 2);
 HX711Sensor hx1(1, "Weight 1",
                 PIN_DT_BREED, PIN_CLK,
                 [](float v) -> float
                 { 
-                    weight1Filter.filter(v);
+                    // weight1Filter.filter(v);
                     return v; }); // Intercept with formula here
 
 /**
@@ -129,12 +129,12 @@ HX711Sensor hx1(1, "Weight 1",
  *
  * Weight Sensor is read, change the interceptor formula for calibrate.
  */
-TrimmedMovingAverage weight2Filter(20, 2);
+// TrimmedMovingAverage weight2Filter(20, 2);
 HX711Sensor hx2(1, "Weight 2",
                 PIN_DT_YIELD, PIN_CLK,
                 [](float v) -> float
                 { 
-                    weight2Filter.filter(v);
+                    // weight2Filter.filter(v);
                     return v; }); // Intercept with formula here
 
 DS18B20Sensor ds(1, "WATER TEMP", PIN_DS18);
@@ -144,10 +144,14 @@ static bool isCalibrationADS = false;
 static bool isCalibrationHX711 = false;
 static bool isTransmitSupabase = true;
 
+TaskHandle_t hx711Handler;
+TaskHandle_t otherHandler;
+void taskSamplingHX711(void *pv);
+void taskOther(void *pv);
+
 void setup()
 {
-    esp_task_wdt_init(30, true);
-    esp_task_wdt_add(NULL);
+    // esp_task_wdt_init(30, true);
 
     analogWriteFrequency(500);
 
@@ -252,6 +256,25 @@ void setup()
     sensors.humidity_air.status = sensors.temperature_air.status;
     // same adc with ph
     sensors.humidity_soil.status = sensors.ph.status;
+
+    xTaskCreate(
+        taskSamplingHX711,
+        "HX711 Sampling",
+        4096,
+        NULL,
+        1,
+        &hx711Handler);
+
+    xTaskCreate(
+        taskOther,
+        "Other Task",
+        8192,
+        NULL,
+        2,
+        &otherHandler);
+
+    // esp_task_wdt_add(hx711Handler);
+    // esp_task_wdt_add(otherHandler);
 }
 
 uint32_t lastUpdate = 0;
@@ -262,107 +285,115 @@ uint32_t lastTimerHeater = 0;
 
 void loop()
 {
-    inet.reconnect();
-    esp_task_wdt_reset();
+    // esp_task_wdt_reset();
+    vTaskDelay(portMAX_DELAY);
+}
 
-    if (millis() - lastLogLocal >= 5000 && !(isCalibrationADS || isCalibrationHX711))
+void taskOther(void *pv)
+{
+    while (1)
     {
-        const float W1_ZERO = 206441;    // Baseline W1
-        const float W2_ZERO = 419842;    // Baseline W2
-        const float CAL_FACTOR = 195.88; // units/gram
-        const float TARE = -17.74;
+        inet.reconnect();
+        ElegantOTA.loop();
+        // esp_task_wdt_reset();
+
+        if (millis() - lastLogLocal >= 1000 && !(isCalibrationADS || isCalibrationHX711))
+        {
+            sensors.temperature_air.value = dhtSensor.getTemperature();
+            sensors.humidity_air.value = dhtSensor.getHumidity();
+            sensors.temperature_soil.value = ds.read();
+            sensors.humidity_soil.value = soilHum.read();
+            sensors.ph.value = phSensor.read();
+
+            const char *logSensor = sensors.toJson();
+            Serial.println(logSensor);
+            WebSerial.println(logSensor);
+
+            lastLogLocal = millis();
+        }
+
+        if (millis() - lastUpdate >= 60000 && isTransmitSupabase)
+        {
+            const char *jsonString = sensors.toJson();
+            int response = inet.send("%5BSIBOB%5D%20sensor", jsonString);
+            Serial.printf("Supabase Res Code: %d\n", response);
+            WebSerial.printf("Supabase Res Code: %d\n", response);
+
+            lastUpdate = millis();
+        }
+
+        if (millis() - lastTimerHeater >= 10000)
+        {
+            static const BangBangController bang(
+                BangBangConfig{TOP_TEMP_SET, BOT_TEMP_SET, // top temp, bot temp
+                               TOP_HUM_SET, BOT_HUM_SET},  // top hum, bot hum
+                ActuatorConfig{0, 1, 3});                  // pin fan, pin mist, pin heater
+
+            static bool flipFlag = false;
+            bang.control(
+                sensors.temperature_soil.value,
+                sensors.humidity_soil.value);
+
+            bang.controlHeater(
+                sensors.temperature_soil.value,
+                sensors.humidity_soil.value,
+                flipFlag);
+
+            flipFlag = !flipFlag;
+            lastTimerHeater = millis();
+        }
+
+        if (millis() - lastLogADSDebug >= 200 && isCalibrationADS)
+        {
+            volatile uint16_t cachedADS[4] = {0};
+            cachedADS[0] = ads.read(0);
+            cachedADS[1] = ads.read(1);
+            cachedADS[2] = ads.read(2);
+            cachedADS[3] = ads.read(3);
+
+            Serial.printf("CH0: %d | CH1: %d | CH2: %d | CH3: %d\n",
+                          cachedADS[0], cachedADS[1], cachedADS[2], cachedADS[3]);
+            WebSerial.printf("CH0: %d | CH1: %d | CH2: %d | CH3: %d\n",
+                             cachedADS[0], cachedADS[1], cachedADS[2], cachedADS[3]);
+            lastLogADSDebug = millis();
+        }
+
+        if (millis() - lastLogHX711Debug >= 200 && isCalibrationHX711)
+        {
+            Serial.printf("W1: %.1f | W2: %.1f\n",
+                          hx1.readRaw(), hx2.readRaw());
+            WebSerial.printf("W1: %.1f | W2: %.1f\n",
+                             hx1.readRaw(), hx2.readRaw());
+
+            lastLogHX711Debug = millis();
+        }
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+}
+
+void taskSamplingHX711(void *pv)
+{
+    while (1)
+    {
+        esp_task_wdt_reset();
+
 #if defined(SIBOB_1)
         sensors.id = 1;
-        sensors.weight_breed.value = (((hx1.read() - W1_ZERO) + (hx2.read() - W2_ZERO)) / CAL_FACTOR) + TARE;
+        const float W1_ZERO = 200783; // 0g calibration point
+        const float SCALE = 0.010218; // grams per unit
+
+        sensors.weight_breed.value = (hx1.read() - W1_ZERO) * SCALE;
         sensors.weight_yield.value = hx2.read();
+
 #elif defined(SIBOB_2)
         sensors.id = 2;
-        sensors.weight_breed.value = (((hx1.read() - W1_ZERO) + (hx2.read() - W2_ZERO)) / CAL_FACTOR) + TARE;
+        const float W1_ZERO = 200783;
+        const float SCALE = 0.010218;
+
+        sensors.weight_breed.value = (hx1.read() - W1_ZERO) * SCALE;
         sensors.weight_yield.value = hx2.read();
 #endif
-        sensors.temperature_air.value = dhtSensor.getTemperature();
-        sensors.humidity_air.value = dhtSensor.getHumidity();
-        sensors.temperature_soil.value = ds.read();
-        sensors.humidity_soil.value = soilHum.read();
-        sensors.ph.value = phSensor.read();
 
-        const char *logSensor = sensors.toJson();
-        Serial.println(logSensor);
-        WebSerial.println(logSensor);
-
-        lastLogLocal = millis();
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
-
-    if (millis() - lastUpdate >= 60000 && isTransmitSupabase)
-    {
-#if defined(SIBOB_1)
-        sensors.id = 1;
-        sensors.weight_breed.value = hx1.read();
-        sensors.weight_yield.value = hx2.read();
-#elif defined(SIBOB_2)
-        sensors.id = 2;
-        sensors.weight_breed.value = hx1.read();
-        sensors.weight_yield.value = hx2.read();
-#endif
-        sensors.temperature_air.value = dhtSensor.getTemperature();
-        sensors.humidity_air.value = dhtSensor.getHumidity();
-        sensors.temperature_soil.value = ds.read();
-        sensors.humidity_soil.value = soilHum.read();
-        sensors.ph.value = phSensor.read();
-
-        const char *jsonString = sensors.toJson();
-        int response = inet.send("%5BSIBOB%5D%20sensor", jsonString);
-        Serial.printf("Supabase Res Code: %d\n", response);
-        WebSerial.printf("Supabase Res Code: %d\n", response);
-
-        lastUpdate = millis();
-    }
-
-    if (millis() - lastTimerHeater >= 10000)
-    {
-        static const BangBangController bang(
-            BangBangConfig{TOP_TEMP_SET, BOT_TEMP_SET, // top temp, bot temp
-                           TOP_HUM_SET, BOT_HUM_SET},  // top hum, bot hum
-            ActuatorConfig{0, 1, 3});                  // pin fan, pin mist, pin heater
-
-        static bool flipFlag = false;
-        bang.control(
-            sensors.temperature_soil.value,
-            sensors.humidity_soil.value);
-
-        bang.controlHeater(
-            sensors.temperature_soil.value,
-            sensors.humidity_soil.value,
-            flipFlag);
-
-        flipFlag = !flipFlag;
-        lastTimerHeater = millis();
-    }
-
-    if (millis() - lastLogADSDebug >= 200 && isCalibrationADS)
-    {
-        volatile uint16_t cachedADS[4] = {0};
-        cachedADS[0] = ads.read(0);
-        cachedADS[1] = ads.read(1);
-        cachedADS[2] = ads.read(2);
-        cachedADS[3] = ads.read(3);
-
-        Serial.printf("CH0: %d | CH1: %d | CH2: %d | CH3: %d\n",
-                      cachedADS[0], cachedADS[1], cachedADS[2], cachedADS[3]);
-        WebSerial.printf("CH0: %d | CH1: %d | CH2: %d | CH3: %d\n",
-                         cachedADS[0], cachedADS[1], cachedADS[2], cachedADS[3]);
-        lastLogADSDebug = millis();
-    }
-
-    if (millis() - lastLogHX711Debug >= 200 && isCalibrationHX711)
-    {
-        Serial.printf("W1: %.1f | W2: %.1f\n",
-                      hx1.readRaw(), hx2.readRaw());
-        WebSerial.printf("W1: %.1f | W2: %.1f\n",
-                         hx1.readRaw(), hx2.readRaw());
-
-        lastLogHX711Debug = millis();
-    }
-
-    ElegantOTA.loop();
 }
