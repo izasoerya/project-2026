@@ -150,8 +150,10 @@ static bool isTransmitSupabase = true;
 static bool isManualMode = false;
 
 TaskHandle_t hx711Handler;
+TaskHandle_t supaHandler;
 TaskHandle_t otherHandler;
 void taskSamplingHX711(void *pv);
+void taskSupa(void *pv);
 void taskOther(void *pv);
 
 void setup()
@@ -295,10 +297,18 @@ void setup()
     xTaskCreate(
         taskSamplingHX711,
         "HX711 Sampling",
-        4096,
+        8192,
         NULL,
         1,
         &hx711Handler);
+
+    xTaskCreate(
+        taskSupa,
+        "Supa Send Data",
+        8192,
+        NULL,
+        1,
+        &supaHandler);
 
     xTaskCreate(
         taskOther,
@@ -309,7 +319,6 @@ void setup()
         &otherHandler);
 }
 
-uint32_t lastUpdate = 0;
 uint32_t lastLogLocal = 0;
 uint32_t lastLogADSDebug = 0;
 uint32_t lastLogHX711Debug = 0;
@@ -338,7 +347,7 @@ void taskOther(void *pv)
             sensors.humidity_air.value = dhtSensor.getHumidity();
             sensors.temperature_soil.value = ds.read();
             sensors.humidity_soil.value = constrain((soilHum.read() - 2.047f) / (0.876f - 2.047f) * 100.0f, 0, 100);
-            sensors.ph.value = constrain((0.0578 * phSensor.read() * 1000.0 + 19.835), 0, 14);
+            sensors.ph.value = constrain((0.0633 * phSensor.read() * 1000.0 + 19.835), 0, 14);
 #endif // SIBOB_2
             const char *logSensor = sensors.toJson();
             Serial.println(logSensor);
@@ -346,16 +355,6 @@ void taskOther(void *pv)
 
             lastLogLocal = millis();
         }
-
-        // if (millis() - lastUpdate >= 60000 && isTransmitSupabase)
-        // {
-        //     const char *jsonString = sensors.toJson();
-        //     int response = inet.send("%5BSIBOB%5D%20sensor", jsonString);
-        //     Serial.printf("Supabase Res Code: %d\n", response);
-        //     WebSerial.printf("Supabase Res Code: %d\n", response);
-
-        //     lastUpdate = millis();
-        // }
 
         if (millis() - lastTimerHeater >= 10000 && !isManualMode)
         {
@@ -403,6 +402,25 @@ void taskOther(void *pv)
             lastLogHX711Debug = millis();
         }
         vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+}
+
+void taskSupa(void *pv)
+{
+    while (1)
+    {
+        vTaskSuspend(otherHandler);
+        vTaskSuspend(hx711Handler);
+
+        const char *jsonString = sensors.toJson();
+        int response = inet.send("%5BSIBOB%5D%20sensor", jsonString);
+        Serial.printf("Supabase Res Code: %d\n", response);
+        WebSerial.printf("Supabase Res Code: %d\n", response);
+
+        vTaskResume(otherHandler);
+        vTaskResume(hx711Handler);
+
+        vTaskDelay(60000 / portTICK_PERIOD_MS);
     }
 }
 
