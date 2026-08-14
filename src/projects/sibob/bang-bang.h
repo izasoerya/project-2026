@@ -2,6 +2,7 @@
 #define BANG_BANG_H
 
 #include <Arduino.h>
+#include "actuator/controller.h"
 
 struct BangBangConfig
 {
@@ -22,85 +23,62 @@ class BangBangController
 {
 private:
     BangBangConfig _configSetPoint;
-    ActuatorConfig _configActuator;
+    AnalogController _fanController;
+    AnalogController _mistController;
+    AnalogController _heaterController;
 
 public:
-    // Lazy separate body file sorry
     BangBangController(const BangBangConfig setPointConfig,
                        const ActuatorConfig actuatorConfig)
-    {
-        _configSetPoint = setPointConfig;
-        _configActuator = actuatorConfig;
-    }
+        : _configSetPoint(setPointConfig),
+          _fanController(actuatorConfig.pinExhaustFan, 500, 255),
+          _mistController(actuatorConfig.pinMistMaker, 500, 255),
+          _heaterController(actuatorConfig.pinHeater, 500, 10) {}
+
     ~BangBangController() {}
 
-    void control(float temperature, float humidity) const
+    void begin()
     {
-        if (temperature > _configSetPoint.upperTemp)
-        {
-            // Turn off exhaust fan
-            digitalWrite(_configActuator.pinExhaustFan, HIGH);
-            Serial.print("FAN IS ON  pin: ");
-            Serial.println(_configActuator.pinExhaustFan);
-        }
-        else if (temperature < _configSetPoint.bottomTemp)
-        {
-            // Turn on exhaust fan
-            digitalWrite(_configActuator.pinExhaustFan, LOW);
-            Serial.print("FAN IS OFF pin: ");
-            Serial.println(_configActuator.pinExhaustFan);
-        }
+        _fanController.begin();
+        _mistController.begin();
+        _heaterController.begin();
+    }
 
+    void control(float temperature, float humidity)
+    {
+        // Temperature control: FAN
+        if (temperature > _configSetPoint.upperTemp)
+            _fanController.control(255); // Full ON
+        else if (temperature < _configSetPoint.bottomTemp)
+            _fanController.control(0); // OFF
+
+        // Humidity control: MIST
         if (humidity > _configSetPoint.upperHum)
         {
-            // Turn off mist maker
-            digitalWrite(_configActuator.pinMistMaker, LOW);
-            Serial.print("MIST IS OFF  pin: ");
-            Serial.println(_configActuator.pinMistMaker);
-
-            // Turn off exhaust fan
-            digitalWrite(_configActuator.pinExhaustFan, HIGH);
-            Serial.print("FAN IS ON  pin: ");
-            Serial.println(_configActuator.pinExhaustFan);
+            _mistController.control(0);  // OFF
+            _fanController.control(255); // Turn on fan to exhaust humidity
         }
         else if (humidity < _configSetPoint.bottomHum)
         {
-            // Turn on mist maker
-            digitalWrite(_configActuator.pinMistMaker, HIGH);
-            Serial.print("MIST IS ON  pin: ");
-            Serial.println(_configActuator.pinMistMaker);
-
-            // Turn on exhaust fan
-            digitalWrite(_configActuator.pinExhaustFan, LOW);
-            Serial.print("FAN IS OFF pin: ");
-            Serial.println(_configActuator.pinExhaustFan);
+            _mistController.control(255); // Full ON
+            _fanController.control(0);    // Turn off fan
         }
     }
 
-    void controlHeater(float temperature, float humidity, bool forcedOff) const
+    void controlHeater(float temperature, float humidity, bool forcedOff)
     {
         static bool heatDemand = false;
+
+        // Hysteresis for heater
         if (temperature < _configSetPoint.bottomTemp)
-        {
             heatDemand = true;
-        }
         else if (temperature >= _configSetPoint.upperTemp)
-        {
             heatDemand = false;
-        }
 
         if (forcedOff || !heatDemand)
-        {
-            analogWrite(_configActuator.pinHeater, 0);
-            Serial.print("HEATER IS OFF  pin: ");
-            Serial.println(_configActuator.pinHeater);
-        }
+            _heaterController.control(0);
         else
-        {
-            analogWrite(_configActuator.pinHeater, 10);
-            Serial.print("HEATER IS ON  pin: ");
-            Serial.println(_configActuator.pinHeater);
-        }
+            _heaterController.control(10);
     }
 };
 
