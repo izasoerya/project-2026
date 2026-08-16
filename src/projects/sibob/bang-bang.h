@@ -33,7 +33,7 @@ public:
         : _configSetPoint(setPointConfig),
           _fanController(actuatorConfig.pinExhaustFan, 500, 255),
           _mistController(actuatorConfig.pinMistMaker, 500, 255),
-          _heaterController(actuatorConfig.pinHeater, 500, 10) {}
+          _heaterController(actuatorConfig.pinHeater, 500, 15) {}
 
     ~BangBangController() {}
 
@@ -55,13 +55,11 @@ public:
         // Humidity control: MIST
         if (humidity > _configSetPoint.upperHum)
         {
-            _mistController.control(0);  // OFF
-            _fanController.control(255); // Turn on fan to exhaust humidity
+            _mistController.control(0); // OFF
         }
         else if (humidity < _configSetPoint.bottomHum)
         {
             _mistController.control(255); // Full ON
-            _fanController.control(0);    // Turn off fan
         }
     }
 
@@ -78,7 +76,7 @@ public:
         if (forcedOff || !heatDemand)
             _heaterController.control(0);
         else
-            _heaterController.control(10);
+            _heaterController.control(15);
     }
 };
 
