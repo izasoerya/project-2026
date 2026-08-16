@@ -1,3 +1,11 @@
+/**
+ * @brief Device Configuration
+ *
+ * Uncomment the devivce that will be build
+ */
+#define SIBOB_1
+// #define SIBOB_2
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ElegantOTA.h>
@@ -17,14 +25,6 @@
 #include "bang-bang.h"
 #include "models.h"
 #include "config.h"
-
-/**
- * @brief Device Configuration
- *
- * Uncomment the devivce that will be build
- */
-// #define SIBOB_1
-#define SIBOB_2
 
 /**
  * @brief Pinout Configuration
@@ -59,8 +59,8 @@
  * @param TOP_HUM_SET -> set top cap humidity for mist
  * @param BOT_HUM_SET -> set bot cap humiidty for mist
  */
-#define TOP_TEMP_SET 25
-#define BOT_TEMP_SET 10
+#define TOP_TEMP_SET 30
+#define BOT_TEMP_SET 25
 #define TOP_HUM_SET 90
 #define BOT_HUM_SET 40
 
@@ -338,16 +338,16 @@ void taskOther(void *pv)
             vTaskResume(hx711Handler);
             vTaskResume(supaHandler);
 
-#if defined(SIBOB_1)
+#if defined(SIBOB_1) // TODO: CALIBRATE SOIL HUM AND PH
             sensors.temperature_air.value = (dhtSensor.getTemperature() / 29.2) * 26.5;
             sensors.humidity_air.value = (dhtSensor.getHumidity() / 64.2) * 27;
-            sensors.temperature_soil.value = (ds.read() / 28.5) * 26.9;
+            sensors.temperature_soil.value = ds.read();
             sensors.humidity_soil.value = soilHum.read();
             sensors.ph.value = phSensor.read();
 #endif // SIBOB_1
 #if defined(SIBOB_2)
-            sensors.temperature_air.value = dhtSensor.getTemperature();
-            sensors.humidity_air.value = dhtSensor.getHumidity();
+            sensors.temperature_air.value = (dhtSensor.getTemperature() / 30.5) * 27.8;
+            sensors.humidity_air.value = (dhtSensor.getHumidity() / 69.7 * 26.0);
             sensors.temperature_soil.value = ds.read();
             sensors.humidity_soil.value = constrain((soilHum.read() - 2.047f) / (0.876f - 2.047f) * 100.0f, 0, 100);
             sensors.ph.value = constrain((phSensor.read() * 1000.0F - 656.75) / -46.182 - 0.5, 0, 14);
@@ -359,26 +359,26 @@ void taskOther(void *pv)
             lastLogLocal = millis();
         }
 
-        if (millis() - lastTimerHeater >= 10000 && !isManualMode && !(isCalibrationADS || isCalibrationHX711))
+        if (!isManualMode && !(isCalibrationADS || isCalibrationHX711))
         {
             static BangBangController bang(
                 BangBangConfig{TOP_TEMP_SET, BOT_TEMP_SET, // top temp, bot temp
                                TOP_HUM_SET, BOT_HUM_SET},  // top hum, bot hum
                 ActuatorConfig{0, 1, 3});                  // pin fan, pin mist, pin heater
 
-            static bool flipFlag = false;
+            const uint32_t now = millis();
             bang.control(
                 sensors.temperature_soil.value,
                 sensors.humidity_soil.value);
 
-            if (!(sensors.temperature_soil.value <= 10))
-                bang.controlHeater(
-                    sensors.temperature_soil.value,
-                    sensors.humidity_soil.value,
-                    flipFlag);
+            if (lastTimerHeater == 0 || (now - lastTimerHeater) >= 60000)
+                lastTimerHeater = now;
 
-            flipFlag = !flipFlag;
-            lastTimerHeater = millis();
+            const bool isHeaterOnWindow = (now - lastTimerHeater) < 1000;
+            bang.controlHeater(
+                sensors.temperature_soil.value,
+                sensors.humidity_soil.value,
+                !isHeaterOnWindow);
         }
 
         if (millis() - lastLogADSDebug >= 200 && isCalibrationADS)
