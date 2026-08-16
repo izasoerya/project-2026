@@ -30,7 +30,7 @@ public:
         return true;
     }
 
-    int16_t read(uint8_t channel)
+    float read(uint8_t channel)
     {
         // Only set multiplexer if channel changed
         if (_currentChannel != channel)
