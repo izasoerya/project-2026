@@ -113,11 +113,11 @@ const int daylightOffset_sec = 0;
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 AppState state = AppState::NORMAL_MODE;
-uint64_t prevBlynkSend = 0;
-uint64_t prevSampling = 0;
+static AquaponicSensorEntity sensor;
 uint8_t adsSensorCounter = 0;
-uint64_t prevScreen = 0;
 float arrayADS[2];
+bool isTransmitSupabase = true;
+bool isCalibrationADS = false;
 
 // #define CALIBRATION
 
@@ -149,8 +149,24 @@ void setup()
     lightIntensitySensor.begin();
 
     WebSerial.begin(&server);
-    ElegantOTA.begin(&server);
-    ElegantOTA.setAutoReboot(true);
+    WebSerial.onMessage(
+        [&](uint8_t *data, size_t len)
+        {
+            String d = "";
+            for (size_t i = 0; i < len; i++)
+                d += char(data[i]);
+            if (d == "ADS_CALIBRATE")
+                isCalibrationADS = true;
+            else if (d == "DISABLE_SUPABASE")
+                isTransmitSupabase = false;
+            else if (d == "ENABLE_SUPABASE")
+                isTransmitSupabase = true;
+            else if (d == "NORMAL")
+            {
+                isCalibrationADS = false;
+            }
+            WebSerial.println(d);
+        });
 
     uint8_t retryCounter = 0;
     struct tm timeinfo;
@@ -174,10 +190,17 @@ void setup()
                          WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
 
     ElegantOTA.begin(&server);
+    ElegantOTA.setAutoReboot(true);
+    ElegantOTA.begin(&server);
     server.begin();
 }
 
 #ifndef CALIBRATION
+
+uint32_t prevBlynkSend = 0;
+uint32_t prevSampling = 0;
+uint32_t prevScreen = 0;
+uint32_t prevDebugADS = 0;
 
 void loop()
 {
@@ -185,8 +208,7 @@ void loop()
     blynk.reconnect();
     ElegantOTA.loop();
 
-    static AquaponicSensorEntity sensor;
-    if (millis() - prevSampling > 50)
+    if (millis() - prevSampling > 200 && !isCalibrationADS)
     {
         /**
          * @brief Reading in turn since ADS is multiplexer
@@ -214,7 +236,7 @@ void loop()
         prevSampling = millis();
     }
 
-    if (millis() - prevBlynkSend > 30000)
+    if (millis() - prevBlynkSend > 30000 && isTransmitSupabase && !isCalibrationADS)
     {
         const char *sensorString = sensor.toString();
         Serial.println(sensorString);
@@ -253,6 +275,22 @@ void loop()
         lcd.printf("%.1fppm", sensor.waterTDS);
 
         prevBlynkSend = millis();
+    }
+
+    if (millis() - prevDebugADS >= 200 && isCalibrationADS)
+    {
+        volatile uint16_t cachedADS[4] = {0};
+        cachedADS[0] = ads.read(0);
+        cachedADS[1] = ads.read(1);
+        cachedADS[2] = ads.read(2);
+        cachedADS[3] = ads.read(3);
+
+        Serial.printf("CH0: %d | CH1: %d | CH2: %d | CH3: %d\n",
+                      cachedADS[0], cachedADS[1], cachedADS[2], cachedADS[3]);
+        WebSerial.printf("CH0: %d | CH1: %d | CH2: %d | CH3: %d\n",
+                         cachedADS[0], cachedADS[1], cachedADS[2], cachedADS[3]);
+
+        prevDebugADS = millis();
     }
 }
 
