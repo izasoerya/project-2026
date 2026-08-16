@@ -72,12 +72,13 @@ const char *hostname = "sibob-1";
 #if defined(SIBOB_2)
 const char *hostname = "sibob-2";
 #endif // SIBOB_2
+
 const char *supabaseUrl = "https://gothabjdasaphwzrjnto.supabase.co";
 const char *supabasePublicKey = "sb_publishable_Dx3vXSh8qdQhM1Zi_V1MTQ_ifqdbX1o";
 SupabaseTransport transport = SupabaseTransport(supabaseUrl, supabasePublicKey);
 
 AsyncWebServer server(80);
-WiFiModule inet(ssid, password, hostname, WIFI_POWER_19_5dBm);
+WiFiModule inet(ssid, password, hostname, WIFI_POWER_8_5dBm);
 WireGuard wg;
 
 const char *ntpServer = "pool.ntp.org";
@@ -97,7 +98,12 @@ DHTSensor dhtSensor(PIN_DHT);
 TrimmedMovingAverage phFilter(20, 2);
 ADSSensor phSensor(1, "PH Soil", CHANNEL_PH,
                    &ads, [](float v) -> float
-                   { return v; });
+                   {
+                    digitalWrite(PIN_EN_PH, LOW);
+                    delay(100);
+                    phFilter.filter(v);
+                    digitalWrite(PIN_EN_PH, HIGH);
+                    return v; });
 
 /**
  * @brief Soil Humidity Sensor Configuration
@@ -108,40 +114,34 @@ ADSSensor phSensor(1, "PH Soil", CHANNEL_PH,
 TrimmedMovingAverage soilHumFilter(20, 2);
 ADSSensor soilHum(1, "Soil Humidity", CHANNEL_SOIL_HUM,
                   &ads, [](float v) -> float
-                  { soilHumFilter.filter(v); 
-                    return v; }); // Intercept with formula here
+                  { soilHumFilter.filter(v);
+                    return v; });
 
 /**
  * @brief Weight Sensor 1 Configuration
  *
  * Weight Sensor is read, change the interceptor formula for calibrate.
  */
-// TrimmedMovingAverage weight1Filter(20, 2);
 HX711Sensor hx1(1, "Weight 1",
                 PIN_DT_BREED, PIN_CLK,
                 [](float v) -> float
-                { 
-                    // weight1Filter.filter(v);
-                    return v; }); // Intercept with formula here
+                { return v; }); // No need to filter, already using median inside lib
 
 /**
  * @brief Weight Sensor 2 Configuration
  *
  * Weight Sensor is read, change the interceptor formula for calibrate.
  */
-// TrimmedMovingAverage weight2Filter(20, 2);
 HX711Sensor hx2(1, "Weight 2",
                 PIN_DT_YIELD, PIN_CLK,
                 [](float v) -> float
-                { 
-                    // weight2Filter.filter(v);
-                    return v; }); // Intercept with formula here
+                { return v; }); // No need to filter, already using median inside lib
 
 DS18B20Sensor ds(1, "WATER TEMP", PIN_DS18);
 
 AnalogController fan(PIN_FAN, 500, 128);
 AnalogController mist(PIN_MIST, 500, 128);
-AnalogController heater(PIN_HEATER, 500, 10);
+AnalogController heater(PIN_HEATER, 500, 15);
 
 static SensorData sensors;
 static bool isCalibrationADS = false;
@@ -163,7 +163,7 @@ void setup()
     mist.begin();
     heater.begin();
     pinMode(PIN_EN_PH, OUTPUT);
-    digitalWrite(PIN_EN_PH, LOW);
+    digitalWrite(PIN_EN_PH, HIGH);
 
     Serial.begin(115200);
     inet.begin(
@@ -194,7 +194,7 @@ void setup()
                 isTransmitSupabase = true;
             else if (d == "NORMAL")
             {
-                isManualMode = true;
+                isManualMode = false;
                 isCalibrationHX711 = false;
                 isCalibrationADS = false;
             }
@@ -232,12 +232,12 @@ void setup()
     Wire.begin(PIN_SDA, PIN_SCL);
 
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-              { 
+              {
                 String buffer;
                 serializeJsonPretty(sensors.toJsonDocument(), buffer);
                 request->send(200, "application/json", buffer); });
     server.on("/restart", HTTP_GET, [](AsyncWebServerRequest *request)
-              { 
+              {
                 request->send(200, "text/plain", "Restarting now...");
 				  esp_restart(); });
     server.begin();
@@ -287,7 +287,7 @@ void setup()
     sensors.weight_breed.status = hx1.begin();
     sensors.weight_yield.status = hx2.begin();
     sensors.temperature_soil.status = ds.begin();
-    sensors.ph.status = ads.begin(ADS1115_PGA_2P048); // It's just ads
+    sensors.ph.status = ads.begin(ADS1115_PGA_4P096); // It's just ads
 
     // same sensor with temp air
     sensors.humidity_air.status = sensors.temperature_air.status;
@@ -333,8 +333,11 @@ void taskOther(void *pv)
         inet.reconnect();
         ElegantOTA.loop();
 
-        if (millis() - lastLogLocal >= 1000 && !(isCalibrationADS || isCalibrationHX711))
+        if (millis() - lastLogLocal >= 3000 && !(isCalibrationADS || isCalibrationHX711))
         {
+            vTaskResume(hx711Handler);
+            vTaskResume(supaHandler);
+
 #if defined(SIBOB_1)
             sensors.temperature_air.value = (dhtSensor.getTemperature() / 29.2) * 26.5;
             sensors.humidity_air.value = (dhtSensor.getHumidity() / 64.2) * 27;
@@ -347,7 +350,7 @@ void taskOther(void *pv)
             sensors.humidity_air.value = dhtSensor.getHumidity();
             sensors.temperature_soil.value = ds.read();
             sensors.humidity_soil.value = constrain((soilHum.read() - 2.047f) / (0.876f - 2.047f) * 100.0f, 0, 100);
-            sensors.ph.value = constrain((0.0633 * phSensor.read() * 1000.0 + 19.835), 0, 14);
+            sensors.ph.value = constrain((phSensor.read() * 1000.0F - 656.75) / -46.182 - 0.5, 0, 14);
 #endif // SIBOB_2
             const char *logSensor = sensors.toJson();
             Serial.println(logSensor);
@@ -356,7 +359,7 @@ void taskOther(void *pv)
             lastLogLocal = millis();
         }
 
-        if (millis() - lastTimerHeater >= 10000 && !isManualMode)
+        if (millis() - lastTimerHeater >= 10000 && !isManualMode && !(isCalibrationADS || isCalibrationHX711))
         {
             static BangBangController bang(
                 BangBangConfig{TOP_TEMP_SET, BOT_TEMP_SET, // top temp, bot temp
@@ -368,10 +371,11 @@ void taskOther(void *pv)
                 sensors.temperature_soil.value,
                 sensors.humidity_soil.value);
 
-            bang.controlHeater(
-                sensors.temperature_soil.value,
-                sensors.humidity_soil.value,
-                flipFlag);
+            if (!(sensors.temperature_soil.value <= 10))
+                bang.controlHeater(
+                    sensors.temperature_soil.value,
+                    sensors.humidity_soil.value,
+                    flipFlag);
 
             flipFlag = !flipFlag;
             lastTimerHeater = millis();
@@ -379,21 +383,25 @@ void taskOther(void *pv)
 
         if (millis() - lastLogADSDebug >= 200 && isCalibrationADS)
         {
-            volatile uint16_t cachedADS[4] = {0};
-            cachedADS[0] = ads.read(0);
-            cachedADS[1] = ads.read(1);
-            cachedADS[2] = ads.read(2);
-            cachedADS[3] = ads.read(3);
+            vTaskSuspend(hx711Handler);
+            vTaskSuspend(supaHandler);
 
-            Serial.printf("CH0: %d | CH1: %d | CH2: %d | CH3: %d\n",
-                          cachedADS[0], cachedADS[1], cachedADS[2], cachedADS[3]);
-            WebSerial.printf("CH0: %d | CH1: %d | CH2: %d | CH3: %d\n",
-                             cachedADS[0], cachedADS[1], cachedADS[2], cachedADS[3]);
+            float cachedADS[4] = {0};
+            cachedADS[0] = ads.read(0); // in mV
+            cachedADS[1] = ads.read(1); // in mV
+
+            Serial.printf("PH: %.2f | SOILHUM: %.2f\n",
+                          cachedADS[0], cachedADS[1]);
+            WebSerial.printf("PH: %.2f | SOILHUM: %.2f\n",
+                             cachedADS[0], cachedADS[1]);
             lastLogADSDebug = millis();
         }
 
         if (millis() - lastLogHX711Debug >= 200 && isCalibrationHX711)
         {
+            vTaskSuspend(hx711Handler);
+            vTaskSuspend(supaHandler);
+
             Serial.printf("W1: %.1f | W2: %.1f\n",
                           hx1.readRaw(), hx2.readRaw());
             WebSerial.printf("W1: %.1f | W2: %.1f\n",
