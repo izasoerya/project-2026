@@ -3,10 +3,12 @@
 #include <WebSerial.h>
 #include <LiquidCrystal_I2C.h>
 #include "display/lcd_i2c_basic.h"
+#include <WireGuard-ESP32.h>
 
 #include "../utils/utils.h"
 #include "../utils/parser.h"
 #include "models.h"
+#include "config.h"
 
 #include "reader-module/ads1115_module.h"
 #include "sensor/configs/ds18b20_sensor.h"
@@ -14,15 +16,11 @@
 #include "sensor/configs/ultrasonic_sensor.h"
 #include "sensor/configs/ph_ph4502c.h"
 #include "sensor/configs/tds_dfrobot_sensor.h"
-
 #include "sensor/filters/moving_average.h"
 
 #include "transmitter/configs/lora.h"
 #include "transmitter/configs/wifi_module.h"
 
-#include "display/display_oled.h"
-// #include "config.h"   //
-// #include <WireGuard-ESP32.h>
 #define BLYNK_PRINT Serial
 #define BLYNK_TEMPLATE_ID "TMPL6MXdBYHV3"
 #define BLYNK_TEMPLATE_NAME "Aquaponic"
@@ -78,6 +76,7 @@ WiFiBlynk blynk(
             Serial.printf("Air Pump ON Pin %d, %d\n", PIN_AIR_PUMP, state);
         }
     });
+WireGuard wg;
 
 ADS1115Module ads(ADS1115_DEFAULT_ADDRESS, &Wire);
 
@@ -107,10 +106,9 @@ TDSDFRobotSensor tdsSensor(
 
 AsyncWebServer server(80);
 
-// // === [WG+OTA] ===
-// WireGuard wg;
-// IPAddress wg_local_ip(WG_LOCAL_IP);
-// // ================
+const char *ntpServer = "pool.ntp.org";
+const long gmtOffset_sec = 25200;
+const int daylightOffset_sec = 0;
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
@@ -154,20 +152,27 @@ void setup()
     ElegantOTA.begin(&server);
     ElegantOTA.setAutoReboot(true);
 
-    // WireGuard butuh waktu yang akurat untuk handshake
-    configTime(7 * 3600, 0, "pool.ntp.org", "time.google.com");
-    // time_t now = time(nullptr);
-    // while (now < 100000)
-    // {
-    //     delay(500);
-    //     now = time(nullptr);
-    // }
+    uint8_t retryCounter = 0;
+    struct tm timeinfo;
+    configTime(gmtOffset_sec, daylightOffset_sec, "pool.ntp.org", "time.google.com");
+    while (!getLocalTime(&timeinfo) && retryCounter < 20)
+    {
+        Serial.print(".");
+        delay(500);
+        if (retryCounter >= 20)
+        {
+            Serial.println("\nNTP Sync Failed! Restarting...");
+            WebSerial.println("\nNTP Sync Failed! Restarting...");
+            esp_restart(); // Critical: WireGuard handshake will fail without correct time
+        }
+        retryCounter++;
+    }
 
-    // bool wgOk = wg.begin(wg_local_ip, WG_PRIVATE_KEY, WG_ENDPOINT_ADDRESS,
-    //                      WG_ENDPOINT_PUBLIC_KEY, WG_ENDPOINT_PORT);
-    // Serial.println(wgOk ? "WireGuard tersambung" : "Gagal konek WireGuard!");
+    IPAddress wgLocalIP;
+    wgLocalIP.fromString(WG_DEVICE_LOCAL_IP);
+    bool wgOk = wg.begin(wgLocalIP, WG_DEVICE_PRIVATE_KEY,
+                         WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
 
-    // =====================================================================
     ElegantOTA.begin(&server);
     server.begin();
 }

@@ -3,12 +3,14 @@
 #include <WebSerial.h>
 #include <LiquidCrystal_I2C.h>
 #include <INA219.h>
+#include <WireGuard-ESP32.h>
 
 #include "display/lcd_i2c_basic.h"
 
 #include "../utils/utils.h"
 #include "../utils/parser.h"
 #include "models.h"
+#include "config.h"
 
 #include "reader-module/ads1115_module.h"
 #include "sensor/configs/ph_ph4502c.h"
@@ -50,6 +52,7 @@ WiFiBlynk blynk(
     hostName,
     wifi_power_t::WIFI_POWER_8_5dBm,
     [](uint8_t virtualPin, bool state) {});
+WireGuard wg;
 
 ADS1115Module ads(ADDRESS_ADS1115, &Wire);
 
@@ -58,7 +61,7 @@ ADSSensor turbiditySensor(
     ADS_CHANNEL_TURBIDITY, &ads,
     [](float value) -> float
     {
-        float ntu = 0.1711493f * value - 488.5873f;
+        float ntu = (-1120.4 * pow(value, 2)) + (5742.3 * value) - 4352.9;
         return ntu < 0 ? 0.0f : ntu;
     });
 
@@ -79,13 +82,14 @@ INA219 inaOutput(0x41);
 
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
+const char *ntpServer = "pool.ntp.org";
+const long gmtOffset_sec = 25200;
+const int daylightOffset_sec = 0;
+
 AppState state = AppState::NORMAL_MODE;
-uint64_t prevSendBlynk = 0;
-uint64_t prevSampling = 0;
-uint64_t prevSensorLog = 0;
 uint8_t adsSensorCounter = 0;
 AsyncWebServer server(80);
-int16_t arrayADS[3];
+float arrayADS[3];
 
 // #define CALIBRATION
 
@@ -96,6 +100,27 @@ void setup()
         Serial.println("WiFi is not connected, disabling OTA!");
 
     Wire.begin(PIN_SDA, PIN_SCL);
+
+    uint8_t retryCounter = 0;
+    struct tm timeinfo;
+    configTime(gmtOffset_sec, daylightOffset_sec, "pool.ntp.org", "time.google.com");
+    while (!getLocalTime(&timeinfo) && retryCounter < 20)
+    {
+        Serial.print(".");
+        delay(500);
+        if (retryCounter >= 20)
+        {
+            Serial.println("\nNTP Sync Failed! Restarting...");
+            WebSerial.println("\nNTP Sync Failed! Restarting...");
+            esp_restart(); // Critical: WireGuard handshake will fail without correct time
+        }
+        retryCounter++;
+    }
+
+    IPAddress wgLocalIP;
+    wgLocalIP.fromString(WG_DEVICE_LOCAL_IP);
+    bool wgOk = wg.begin(wgLocalIP, WG_DEVICE_PRIVATE_KEY,
+                         WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
 
     lcd.init(); // initialize the lcd
     lcd.backlight();
@@ -137,6 +162,11 @@ void setup()
 }
 
 #ifndef CALIBRATION
+
+uint32_t prevSendBlynk = 0;
+uint32_t prevSampling = 0;
+uint32_t prevSensorLog = 0;
+uint32_t prevLCDLog = 0;
 
 void loop()
 {
@@ -184,28 +214,8 @@ void loop()
                          tdsSensor.readRawVoltage(), phSensor.readRawVoltage(), turbiditySensor.readRawVoltage());
     }
 
-    if (millis() - prevSendBlynk > 30000)
+    if (millis() - prevLCDLog > 3000)
     {
-        const char *sensorString = sensor.toString();
-        Serial.println(sensorString);
-        WebSerial.println(sensorString);
-
-        PikohidroSystemEntity system{
-            .freeHeap = ESP.getFreeHeap(),
-            .largestFreeBlock = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT),
-            .minFreeHeap = ESP.getMinFreeHeap(),
-            .lastResetReason = esp_reset_reason(),
-        };
-        const char *systemString = system.toString();
-        Serial.println(systemString);
-        WebSerial.println(systemString);
-
-        blynk.send(BLYNK_TURBIDITY_PIN, sensor.waterTurbidity);
-        blynk.send(BLYNK_WATER_PH_PIN, sensor.waterPH);
-        blynk.send(BLYNK_TDS_PIN, sensor.waterTDS);
-        blynk.send(BLYNK_POWER_IN_PIN, sensor.powerIn);
-        blynk.send(BLYNK_POWER_OUT_PIN, sensor.powerOut);
-
         lcd.clear();
         lcd.setCursor(0, 0);
         lcd.print("===== PIKOHIDRO =====");
@@ -233,6 +243,31 @@ void loop()
         lcd.setCursor(10, 3);
         lcd.write(byte(5));
         lcd.printf("O:%.1fW", abs(sensor.powerOut));
+
+        prevLCDLog = millis();
+    }
+
+    if (millis() - prevSendBlynk > 30000)
+    {
+        const char *sensorString = sensor.toString();
+        Serial.println(sensorString);
+        WebSerial.println(sensorString);
+
+        PikohidroSystemEntity system{
+            .freeHeap = ESP.getFreeHeap(),
+            .largestFreeBlock = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT),
+            .minFreeHeap = ESP.getMinFreeHeap(),
+            .lastResetReason = esp_reset_reason(),
+        };
+        const char *systemString = system.toString();
+        Serial.println(systemString);
+        WebSerial.println(systemString);
+
+        blynk.send(BLYNK_TURBIDITY_PIN, sensor.waterTurbidity);
+        blynk.send(BLYNK_WATER_PH_PIN, sensor.waterPH);
+        blynk.send(BLYNK_TDS_PIN, sensor.waterTDS);
+        blynk.send(BLYNK_POWER_IN_PIN, sensor.powerIn);
+        blynk.send(BLYNK_POWER_OUT_PIN, sensor.powerOut);
 
         prevSendBlynk = millis();
     }
