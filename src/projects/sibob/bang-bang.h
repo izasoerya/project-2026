@@ -73,10 +73,18 @@ public:
         else if (temperature >= _configSetPoint.upperTemp)
             heatDemand = false;
 
+#if defined(SIBOB_1)
+        if (forcedOff || !heatDemand)
+            digitalWrite(3, LOW);
+        else
+            digitalWrite(3, HIGH);
+#endif // SIBOB_1
+#if defined(SIBOB_2)
         if (forcedOff || !heatDemand)
             _heaterController.control(0);
         else
             _heaterController.control(15);
+#endif // SIBOB_2
     }
 };
 
