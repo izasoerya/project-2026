@@ -141,7 +141,7 @@ DS18B20Sensor ds(1, "WATER TEMP", PIN_DS18);
 
 AnalogController fan(PIN_FAN, 500, 128);
 AnalogController mist(PIN_MIST, 500, 128);
-AnalogController heater(PIN_HEATER, 500, 15);
+AnalogController heater(PIN_HEATER, 500, 128);
 
 static SensorData sensors;
 static bool isCalibrationADS = false;
@@ -342,16 +342,16 @@ void taskOther(void *pv)
             sensors.temperature_air.value = (dhtSensor.getTemperature() / 29.2) * 26.5;
             sensors.humidity_air.value = (dhtSensor.getHumidity() / 64.2) * 27;
             sensors.temperature_soil.value = ds.read();
-            sensors.humidity_soil.value = soilHum.read();
-            sensors.ph.value = phSensor.read();
+            sensors.humidity_soil.value = constrain((soilHum.read() - 2.055f) / (0.843f - 2.055f) * 100.0f, 0, 100);
+            sensors.ph.value = constrain((phSensor.read() * 1000.0F - 656.75) / -46.182 - 1.7, 0, 14);
 #endif // SIBOB_1
 #if defined(SIBOB_2)
             sensors.temperature_air.value = (dhtSensor.getTemperature() / 30.5) * 27.8;
             sensors.humidity_air.value = (dhtSensor.getHumidity() / 69.7 * 26.0);
             sensors.temperature_soil.value = ds.read();
             sensors.humidity_soil.value = constrain((soilHum.read() - 2.047f) / (0.876f - 2.047f) * 100.0f, 0, 100);
-            sensors.ph.value = constrain((phSensor.read() * 1000.0F - 656.75) / -46.182 - 0.5, 0, 14);
-#endif // SIBOB_2
+            sensors.ph.value = constrain((phSensor.read() * 1000.0F - 656.75) / -46.182 - 0.5, 0, 14); // nexttime explain each number role in this function plz :)
+#endif                                                                                                 // SIBOB_2
             const char *logSensor = sensors.toJson();
             Serial.println(logSensor);
             WebSerial.println(logSensor);
