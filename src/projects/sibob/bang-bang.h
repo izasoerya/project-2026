@@ -25,23 +25,25 @@ private:
     BangBangConfig _configSetPoint;
     AnalogController _fanController;
     AnalogController _mistController;
-    AnalogController _heaterController;
+    ActuatorConfig _configPinout;
 
 public:
     BangBangController(const BangBangConfig setPointConfig,
                        const ActuatorConfig actuatorConfig)
         : _configSetPoint(setPointConfig),
+          _configPinout(actuatorConfig),
           _fanController(actuatorConfig.pinExhaustFan, 500, 255),
-          _mistController(actuatorConfig.pinMistMaker, 500, 255),
-          _heaterController(actuatorConfig.pinHeater, 500, 15) {}
+          _mistController(actuatorConfig.pinMistMaker, 500, 255) {}
 
     ~BangBangController() {}
 
     void begin()
     {
+        pinMode(_configPinout.pinHeater, OUTPUT);
+        digitalWrite(_configPinout.pinHeater, LOW);
+
         _fanController.begin();
         _mistController.begin();
-        _heaterController.begin();
     }
 
     void control(float temperature, float humidity)
@@ -73,18 +75,10 @@ public:
         else if (temperature >= _configSetPoint.upperTemp)
             heatDemand = false;
 
-#if defined(SIBOB_1)
         if (forcedOff || !heatDemand)
-            digitalWrite(3, LOW);
+            digitalWrite(_configPinout.pinHeater, LOW);
         else
-            digitalWrite(3, HIGH);
-#endif // SIBOB_1
-#if defined(SIBOB_2)
-        if (forcedOff || !heatDemand)
-            _heaterController.control(0);
-        else
-            _heaterController.control(15);
-#endif // SIBOB_2
+            digitalWrite(_configPinout.pinHeater, HIGH);
     }
 };
 
