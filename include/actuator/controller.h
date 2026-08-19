@@ -28,6 +28,7 @@ public:
     {
         analogWriteFrequency(500);
         pinMode(_pin, OUTPUT);
+        analogWrite(_pin, 0);
         digitalWrite(_pin, LOW);
     }
 
