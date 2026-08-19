@@ -50,20 +50,6 @@
 #define CHANNEL_PH 0
 #define CHANNEL_SOIL_HUM 1
 
-/**
- * @brief Pinout Configuration
- *
- * Change setpoint of bang-bang control
- * @param TOP_TEMP_SET -> set top cap temperature for fan
- * @param BOT_TEMP_SET -> set bot cap temperature for fan
- * @param TOP_HUM_SET -> set top cap humidity for mist
- * @param BOT_HUM_SET -> set bot cap humiidty for mist
- */
-#define TOP_TEMP_SET 30
-#define BOT_TEMP_SET 25
-#define TOP_HUM_SET 90
-#define BOT_HUM_SET 40
-
 const char *ssid = "NodeSensorWiFi1";
 const char *password = "muhammadnabiyullah";
 #if defined(SIBOB_1)
@@ -143,6 +129,15 @@ AnalogController fan(PIN_FAN, 500, 128);
 AnalogController mist(PIN_MIST, 500, 128);
 AnalogController heater(PIN_HEATER, 500, 128);
 
+float topTempSetPoint = 30;
+float botTempSetPoint = 25;
+float topHumSetPoint = 90;
+float botHumSetPoint = 40;
+BangBangController bang(
+    BangBangConfig{topTempSetPoint, botTempSetPoint, // top temp, bot temp
+                   topHumSetPoint, botHumSetPoint},  // top hum, bot hum
+    ActuatorConfig{0, 1, 3});                        // pin fan, pin mist, pin heater
+
 static SensorData sensors;
 static bool isCalibrationADS = false;
 static bool isCalibrationHX711 = false;
@@ -217,6 +212,14 @@ void setup()
                     mist.control(value);
                 else if (key == "HEATER")
                     heater.control(value);
+                else if (key == "SET_TOP_TEMP")
+                    topTempSetPoint = value;
+                else if (key == "SET_BOT_TEMP")
+                    botTempSetPoint = value;
+                else if (key == "SET_TOP_HUM")
+                    topHumSetPoint = value;
+                else if (key == "SET_BOT_HUM")
+                    botHumSetPoint = value;
                 else
                     WebSerial.printf("Unknown command: %s\n", key.c_str());
 
@@ -361,11 +364,6 @@ void taskOther(void *pv)
 
         if (!isManualMode && !(isCalibrationADS || isCalibrationHX711))
         {
-            static BangBangController bang(
-                BangBangConfig{TOP_TEMP_SET, BOT_TEMP_SET, // top temp, bot temp
-                               TOP_HUM_SET, BOT_HUM_SET},  // top hum, bot hum
-                ActuatorConfig{0, 1, 3});                  // pin fan, pin mist, pin heater
-
             const uint32_t now = millis();
             bang.control(
                 sensors.temperature_soil.value,

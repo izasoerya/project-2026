@@ -28,7 +28,7 @@ private:
     ActuatorConfig _configPinout;
 
 public:
-    BangBangController(const BangBangConfig setPointConfig,
+    BangBangController(BangBangConfig setPointConfig,
                        const ActuatorConfig actuatorConfig)
         : _configSetPoint(setPointConfig),
           _configPinout(actuatorConfig),
