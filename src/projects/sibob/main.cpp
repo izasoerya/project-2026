@@ -3,8 +3,8 @@
  *
  * Uncomment the devivce that will be build
  */
-#define SIBOB_1
-// #define SIBOB_2
+// #define SIBOB_1
+#define SIBOB_2
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -129,14 +129,12 @@ AnalogController fan(PIN_FAN, 500, 128);
 AnalogController mist(PIN_MIST, 500, 128);
 AnalogController heater(PIN_HEATER, 500, 128);
 
-float topTempSetPoint = 30;
-float botTempSetPoint = 25;
-float topHumSetPoint = 90;
-float botHumSetPoint = 40;
+BangBangConfig bgConfig{30, 25,  // top temp, bot temp
+                        90, 40}; // top hum, bot hum
+
 BangBangController bang(
-    BangBangConfig{topTempSetPoint, botTempSetPoint, // top temp, bot temp
-                   topHumSetPoint, botHumSetPoint},  // top hum, bot hum
-    ActuatorConfig{0, 1, 3});                        // pin fan, pin mist, pin heater
+    &bgConfig,
+    ActuatorConfig{PIN_FAN, PIN_MIST, PIN_HEATER}); // pin fan, pin mist, pin heater
 
 static SensorData sensors;
 static bool isCalibrationADS = false;
@@ -213,13 +211,25 @@ void setup()
                 else if (key == "HEATER")
                     heater.control(value);
                 else if (key == "SET_TOP_TEMP")
-                    topTempSetPoint = value;
+                {
+                    isManualMode = false;
+                    bgConfig.upperTemp = value;
+                }
                 else if (key == "SET_BOT_TEMP")
-                    botTempSetPoint = value;
+                {
+                    isManualMode = false;
+                    bgConfig.bottomTemp = value;
+                }
                 else if (key == "SET_TOP_HUM")
-                    topHumSetPoint = value;
+                {
+                    isManualMode = false;
+                    bgConfig.upperHum = value;
+                }
                 else if (key == "SET_BOT_HUM")
-                    botHumSetPoint = value;
+                {
+                    isManualMode = false;
+                    bgConfig.bottomHum = value;
+                }
                 else
                     WebSerial.printf("Unknown command: %s\n", key.c_str());
 
@@ -346,15 +356,15 @@ void taskOther(void *pv)
             sensors.humidity_air.value = (dhtSensor.getHumidity() / 64.2) * 27;
             sensors.temperature_soil.value = ds.read();
             sensors.humidity_soil.value = constrain((soilHum.read() - 2.055f) / (0.843f - 2.055f) * 100.0f, 0, 100);
-            sensors.ph.value = constrain((phSensor.read() * 1000.0F - 656.75) / -46.182 - 1.7, 0, 14);
+            sensors.ph.value = constrain((phSensor.read() * 1000.0F - 626.73) / -28.268 - 5.0, 0, 14);
 #endif // SIBOB_1
 #if defined(SIBOB_2)
             sensors.temperature_air.value = (dhtSensor.getTemperature() / 30.5) * 27.8;
             sensors.humidity_air.value = (dhtSensor.getHumidity() / 69.7 * 26.0);
             sensors.temperature_soil.value = ds.read();
             sensors.humidity_soil.value = constrain((soilHum.read() - 2.047f) / (0.876f - 2.047f) * 100.0f, 0, 100);
-            sensors.ph.value = constrain((phSensor.read() * 1000.0F - 656.75) / -46.182 - 0.5, 0, 14); // nexttime explain each number role in this function plz :)
-#endif                                                                                                 // SIBOB_2
+            sensors.ph.value = constrain((phSensor.read() * 1000.0F - 656.75) / -46.182 - 0.5, 0, 14);
+#endif // SIBOB_2
             const char *logSensor = sensors.toJson();
             Serial.println(logSensor);
             WebSerial.println(logSensor);

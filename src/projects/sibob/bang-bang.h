@@ -22,13 +22,13 @@ struct ActuatorConfig
 class BangBangController
 {
 private:
-    BangBangConfig _configSetPoint;
+    BangBangConfig *_configSetPoint;
     AnalogController _fanController;
     AnalogController _mistController;
     ActuatorConfig _configPinout;
 
 public:
-    BangBangController(BangBangConfig setPointConfig,
+    BangBangController(BangBangConfig *setPointConfig,
                        const ActuatorConfig actuatorConfig)
         : _configSetPoint(setPointConfig),
           _configPinout(actuatorConfig),
@@ -40,6 +40,7 @@ public:
     void begin()
     {
         pinMode(_configPinout.pinHeater, OUTPUT);
+        analogWrite(_configPinout.pinHeater, 0);
         digitalWrite(_configPinout.pinHeater, LOW);
 
         _fanController.begin();
@@ -49,17 +50,20 @@ public:
     void control(float temperature, float humidity)
     {
         // Temperature control: FAN
-        if (temperature > _configSetPoint.upperTemp)
+        if (temperature > _configSetPoint->upperTemp)
+        {
             _fanController.control(255); // Full ON
-        else if (temperature < _configSetPoint.bottomTemp)
+        }
+        else if (temperature < _configSetPoint->bottomTemp)
+        {
             _fanController.control(0); // OFF
-
+        }
         // Humidity control: MIST
-        if (humidity > _configSetPoint.upperHum)
+        if (humidity > _configSetPoint->upperHum)
         {
             _mistController.control(0); // OFF
         }
-        else if (humidity < _configSetPoint.bottomHum)
+        else if (humidity < _configSetPoint->bottomHum)
         {
             _mistController.control(255); // Full ON
         }
@@ -70,15 +74,20 @@ public:
         static bool heatDemand = false;
 
         // Hysteresis for heater
-        if (temperature < _configSetPoint.bottomTemp)
+        if (temperature < _configSetPoint->bottomTemp)
             heatDemand = true;
-        else if (temperature >= _configSetPoint.upperTemp)
+        else if (temperature >= _configSetPoint->upperTemp)
             heatDemand = false;
-
         if (forcedOff || !heatDemand)
+        {
+            analogWrite(_configPinout.pinHeater, 0);
             digitalWrite(_configPinout.pinHeater, LOW);
+        }
         else
+        {
             digitalWrite(_configPinout.pinHeater, HIGH);
+            analogWrite(_configPinout.pinHeater, 255);
+        }
     }
 };
 
