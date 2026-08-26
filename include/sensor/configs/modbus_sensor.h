@@ -60,21 +60,19 @@ class Modbustatics : public BaseSensor
 private:
     const uint8_t _address;
     ModbusRTUBuilder _modbusConfig;
-    const std::function<float(float)> &_interceptor;
+    const std::function<float(float)> _interceptor;
 
 public:
     Modbustatics(
         unsigned char id, const char *name,
         Stream &stream, uint8_t address,
-        const std::function<float(float)> &interceptor = nullptr)
+        const std::function<float(float)> interceptor = nullptr)
         : BaseSensor(id, name),
           _address(address),
           _modbusConfig(ModbusRTUBuilder(stream)),
           _interceptor(interceptor) {}
 
     ~Modbustatics() override = default;
-
-    unsigned char getId() { return getId(); }
 
     void begin()
     {
@@ -83,7 +81,6 @@ public:
 
     float read() override
     {
-        return 20;
         ReadResult res = _modbusConfig.read(0);
         if (res.isOk())
         {
@@ -92,7 +89,9 @@ public:
             return res.value;
         }
         else
+        {
             return res.error; // TODO: SHOULD RETURN ACTUAL ERROR INSTEAD OF NUMBER
+        }
     }
 };
 
