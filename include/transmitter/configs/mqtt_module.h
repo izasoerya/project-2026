@@ -9,7 +9,7 @@ class MQTTModule
 private:
     static const uint8_t _qos = 0;
     static const bool _retain = false;
-    static const uint8_t _port = 1883;
+    static const uint16_t _port = 1883;
 
     const char *_username;
     const char *_password;
