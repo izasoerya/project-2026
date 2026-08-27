@@ -14,6 +14,54 @@
  * 3. Prepare protocol calibration
  */
 
+static Modbustatics awlr_list[9] = {
+    Modbustatics(0, "awlr-1", Serial2, 1, [](float v) { 
+        static MovingAverageFilter mvFilter(20);
+        mvFilter.filter(v);
+        return v;  
+    }),
+    Modbustatics(1, "awlr-2", Serial2, 1, [](float v) { 
+        static MovingAverageFilter mvFilter(20);
+        mvFilter.filter(v);
+        return v;  
+    }),
+    Modbustatics(2, "awlr-3", Serial2, 1, [](float v) { 
+        static MovingAverageFilter mvFilter(20);
+        mvFilter.filter(v);
+        return v;  
+    }),
+    Modbustatics(3, "awlr-4", Serial2, 1, [](float v) { 
+        static MovingAverageFilter mvFilter(20);
+        mvFilter.filter(v);
+        return v;  
+    }),
+    Modbustatics(4, "awlr-5", Serial2, 1, [](float v) { 
+        static MovingAverageFilter mvFilter(20);
+        mvFilter.filter(v);
+        return v;  
+    }),
+    Modbustatics(5, "awlr-6", Serial2, 1, [](float v) { 
+        static MovingAverageFilter mvFilter(20);
+        mvFilter.filter(v);
+        return v;  
+    }),
+    Modbustatics(6, "awlr-7", Serial2, 1, [](float v) { 
+        static MovingAverageFilter mvFilter(20);
+        mvFilter.filter(v);
+        return v;  
+    }),
+    Modbustatics(7, "awlr-8", Serial2, 1, [](float v) { 
+        static MovingAverageFilter mvFilter(20);
+        mvFilter.filter(v);
+        return v;  
+    }),
+    Modbustatics(8, "awlr-9", Serial2, 1, [](float v) { 
+        static MovingAverageFilter mvFilter(20);
+        mvFilter.filter(v);
+        return v;  
+    }),
+};
+
 static Modbustatics turb_list[9] = {
     Modbustatics(0, "turb-ln-1", Serial2, 1, [](float v) { 
         static MovingAverageFilter mvFilter(20);
