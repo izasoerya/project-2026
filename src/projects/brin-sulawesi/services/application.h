@@ -46,8 +46,21 @@ public:
                 {
                     prevLog = xTaskGetTickCount();
 
-                    Serial.printf("Log update | Turbidity: %.1f | AWLR: %.1f\n", receivedTurbidity, receivedAwlr);
-                    WebSerial.printf("Log update | Turbidity: %.1f | AWLR: %.1f\n", receivedTurbidity, receivedAwlr);
+                    char buffer[128];
+                    snprintf(buffer, sizeof(buffer),
+                             "Turbidity: %.1f | AWLR: %.1f",
+                             receivedTurbidity, receivedAwlr);
+                    if (ctx->feature.isMQTTEnabled)
+                    {
+                        uint16_t res = ctx->mqtt->publish("/test", buffer);
+                        if (res == 0)
+                        {
+                            Serial.println("MQTT Publish Failed");
+                            WebSerial.println("MQTT Publish Failed");
+                        }
+                    }
+                    Serial.printf("Success Publish: %s\n", buffer);
+                    WebSerial.printf("Success Publish: %s\n", buffer);
                 }
 
                 vTaskDelay(20 / portTICK_PERIOD_MS);

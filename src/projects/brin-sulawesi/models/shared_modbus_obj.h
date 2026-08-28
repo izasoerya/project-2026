@@ -17,6 +17,7 @@ struct ApplicationContext
     Modbustatics *mbTurbidity;
     Modbustatics *mbAwlr;
     FeatureState feature;
+    MQTTModule *mqtt;
     SemaphoreHandle_t mutex;
 
     ApplicationContext()
@@ -26,6 +27,7 @@ struct ApplicationContext
         mbAwlr = nullptr;
         feature.isMQTTEnabled = true;
         feature.isMQTTAlwaysEnabled = true;
+        mqtt = nullptr;
         mutex = xSemaphoreCreateMutex();
     }
 };

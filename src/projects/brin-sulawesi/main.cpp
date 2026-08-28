@@ -16,10 +16,10 @@ const char *ssid = "NodeSensorWiFi1";
 const char *password = "muhammadnabiyullah";
 const char *hostname = "wtq-1";
 WiFiModule inet(ssid, password, hostname, WIFI_POWER_19_5dBm);
-MQTTModule mqtt("username", "password", "lala.land");
 
-Modbustatics *turbSensor;
-Modbustatics *awlrSensor;
+MQTTModule *mqtt = nullptr;
+Modbustatics *turbSensor = nullptr;
+Modbustatics *awlrSensor = nullptr;
 QueueHandle_t Application::_turbidityQueue = NULL;
 QueueHandle_t Application::_awlrQueue = NULL;
 
@@ -63,6 +63,7 @@ void setup()
     bool mqttRetainOn = prefs.getBool("mqtt_retain_on", 255); // return 255 means no index yet
     ctx.feature.isMQTTEnabled = mqttRetainOn == 255 ? true : mqttRetainOn;
     prefs.end();
+    ctx.mqtt = mqtt;
     Application::initTask();
 
     // clang-format off
@@ -73,7 +74,9 @@ void setup()
     WebSerial.printf("Connected with: %s\n", inet.localIP());
     if (ctx.feature.isMQTTEnabled)
     {
-        if (!mqtt.connect())
+        static MQTTModule mqttObj("username", "password", "lala.land");
+        mqtt = &mqttObj;
+        if (!mqtt->connect())
         {
             Serial.println("Failed to connect broker MQTT");
             WebSerial.println("Failed to connect broker MQTT");
@@ -96,10 +99,33 @@ void setup()
             if (ctx.state == AppState::SET_FEATURE)
             {
                 FeaturesEnum feature = handler.parseFeatureCommand(data, len);
-                prefs.begin("app_config", false);
-                prefs.putBool("mqtt_retain_on",
-                              feature == FeaturesEnum::MQTT_RETAIN_ON ? true : false);
-                prefs.end();
+                if (feature == FeaturesEnum::MQTT_RETAIN_ON || feature == FeaturesEnum::MQTT_RETAIN_OFF)
+                {
+                    prefs.begin("app_config", false);
+                    prefs.putBool("mqtt_retain_on",
+                                  feature == FeaturesEnum::MQTT_RETAIN_ON ? true : false);
+                    prefs.end();
+                }
+                else if (feature == FeaturesEnum::MQTT_ON || feature == FeaturesEnum::MQTT_OFF)
+                {
+                    ctx.feature.isMQTTEnabled = feature == FeaturesEnum::MQTT_ON ? true : false;
+                    if (ctx.feature.isMQTTEnabled && mqtt == nullptr)
+                    {
+                        static MQTTModule mqttObj("username", "password", "lala.land");
+                        mqtt = &mqttObj;
+                        mqtt->connect();
+                    }
+                    else if (!ctx.feature.isMQTTEnabled && mqtt != nullptr)
+                    {
+                        bool isMQTTDisconnected = mqtt->disconnect();
+                        while (!isMQTTDisconnected)
+                        {
+                            isMQTTDisconnected = mqtt->disconnect();
+                            vTaskDelay(100 / portTICK_PERIOD_MS);
+                        }
+                        mqtt = nullptr;
+                    }
+                }
             }
         });
 
