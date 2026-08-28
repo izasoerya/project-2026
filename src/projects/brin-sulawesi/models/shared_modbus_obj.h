@@ -5,11 +5,18 @@
 #include <sensor/configs/modbus_sensor.h>
 #include "../services/appstate_parser.h"
 
+struct FeatureState
+{
+    bool isMQTTEnabled;
+    bool isMQTTAlwaysEnabled;
+};
+
 struct ApplicationContext
 {
     volatile AppState state;
     Modbustatics *mbTurbidity;
     Modbustatics *mbAwlr;
+    FeatureState feature;
     SemaphoreHandle_t mutex;
 
     ApplicationContext()
@@ -17,6 +24,8 @@ struct ApplicationContext
         state = AppState::NORMAL;
         mbTurbidity = nullptr;
         mbAwlr = nullptr;
+        feature.isMQTTEnabled = true;
+        feature.isMQTTAlwaysEnabled = true;
         mutex = xSemaphoreCreateMutex();
     }
 };
