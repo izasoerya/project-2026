@@ -72,16 +72,18 @@ void setup()
     Serial.printf("Connected with: %s\n", inet.localIP());
     WebSerial.printf("Connected with: %s\n", inet.localIP());
     if (ctx.feature.isMQTTEnabled)
+    {
         if (!mqtt.connect())
         {
             Serial.println("Failed to connect broker MQTT");
             WebSerial.println("Failed to connect broker MQTT");
         }
-        else
-        {
-            Serial.println("MQTT is disabled");
-            WebSerial.println("MQTT is disabled");
-        }
+    }
+    else
+    {
+        Serial.println("MQTT is disabled");
+        WebSerial.println("MQTT is disabled");
+    }
 
     server.begin();
     ElegantOTA.begin(&server);
