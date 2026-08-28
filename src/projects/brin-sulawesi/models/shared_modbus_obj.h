@@ -4,6 +4,7 @@
 #include <freertos/semphr.h>
 #include <sensor/configs/modbus_sensor.h>
 #include "../services/appstate_parser.h"
+#include "./transmitter/configs/mqtt_module.h"
 
 struct FeatureState
 {
