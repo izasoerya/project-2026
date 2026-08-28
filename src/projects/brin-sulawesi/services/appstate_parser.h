@@ -16,6 +16,8 @@ enum FeaturesEnum
 {
     MQTT_RETAIN_ON = 0,
     MQTT_RETAIN_OFF,
+    MQTT_ON,
+    MQTT_OFF,
     FEATURES_UNKNOWN
 };
 
@@ -64,6 +66,10 @@ public:
                 return FeaturesEnum::MQTT_RETAIN_ON;
             else if (strcmp(d, "FEAT_MQTT_RETAIN_OFF") == 0)
                 return FeaturesEnum::MQTT_RETAIN_OFF;
+            else if (strcmp(d, "FEAT_MQTT_ON") == 0)
+                return FeaturesEnum::MQTT_ON;
+            else if (strcmp(d, "FEAT_MQTT_OFF") == 0)
+                return FeaturesEnum::MQTT_OFF;
         }
         return FeaturesEnum::FEATURES_UNKNOWN;
     }
