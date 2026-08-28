@@ -55,10 +55,14 @@ void setup()
         if (awlr_list[i].getId() == firmwareId)
             awlrSensor = &awlr_list[i];
     }
-    static ApplicationContext ctx; // Mutex lock variable
+    static ApplicationContext ctx; // Mutex lock context variable
     ctx.state = AppState::NORMAL;
     ctx.mbTurbidity = turbSensor;
     ctx.mbAwlr = awlrSensor;
+    prefs.begin("app_config", true);
+    bool mqttRetainOn = prefs.getBool("mqtt_retain_on", 255); // return 255 means no index yet
+    ctx.feature.isMQTTEnabled = mqttRetainOn == 255 ? true : mqttRetainOn;
+    prefs.end();
     Application::initTask();
 
     // clang-format off
@@ -66,6 +70,18 @@ void setup()
                 []() { esp_restart; });         // On timeout
     // clang-format on
     Serial.printf("Connected with: %s\n", inet.localIP());
+    WebSerial.printf("Connected with: %s\n", inet.localIP());
+    if (ctx.feature.isMQTTEnabled)
+        if (!mqtt.connect())
+        {
+            Serial.println("Failed to connect broker MQTT");
+            WebSerial.println("Failed to connect broker MQTT");
+        }
+        else
+        {
+            Serial.println("MQTT is disabled");
+            WebSerial.println("MQTT is disabled");
+        }
 
     server.begin();
     ElegantOTA.begin(&server);
@@ -75,6 +91,14 @@ void setup()
         [&](uint8_t *data, size_t len)
         {
             ctx.state = handler.parseCommand(data, len);
+            if (ctx.state == AppState::SET_FEATURE)
+            {
+                FeaturesEnum feature = handler.parseFeatureCommand(data, len);
+                prefs.begin("app_config", false);
+                prefs.putBool("mqtt_retain_on",
+                              feature == FeaturesEnum::MQTT_RETAIN_ON ? true : false);
+                prefs.end();
+            }
         });
 
     xTaskCreate(Application::mainTask, "main task", 8192, &ctx, 1, &mainTaskHandle);
