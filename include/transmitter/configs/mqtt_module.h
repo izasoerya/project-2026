@@ -33,6 +33,21 @@ public:
             return true;
     }
 
+    bool reconnect()
+    {
+        if (!_mqttClient.connected())
+        {
+            bool success = _mqttClient.connect();
+            return success;
+        }
+    }
+
+    bool disconnect()
+    {
+        bool success = _mqttClient.disconnect();
+        return success;
+    }
+
     void onMessage(void (*_msgCallback)(const char *topic, const char *payload))
     {
         _mqttClient.onMessage(
