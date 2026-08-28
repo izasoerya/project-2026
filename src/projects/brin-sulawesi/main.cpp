@@ -17,7 +17,11 @@ const char *password = "muhammadnabiyullah";
 const char *hostname = "wtq-1";
 WiFiModule inet(ssid, password, hostname, WIFI_POWER_19_5dBm);
 
-MQTTModule *mqtt = nullptr;
+const char *usernameMqtt = "";
+const char *passwordMqtt = "";
+const char *brokerMqtt = "";
+MQTTModule mqtt(usernameMqtt, passwordMqtt, brokerMqtt);
+
 Modbustatics *turbSensor = nullptr;
 Modbustatics *awlrSensor = nullptr;
 QueueHandle_t Application::_turbidityQueue = NULL;
@@ -63,7 +67,6 @@ void setup()
     bool mqttRetainOn = prefs.getBool("mqtt_retain_on", 255); // return 255 means no index yet
     ctx.feature.isMQTTEnabled = mqttRetainOn == 255 ? true : mqttRetainOn;
     prefs.end();
-    ctx.mqtt = mqtt;
     Application::initTask();
 
     // clang-format off
@@ -74,9 +77,8 @@ void setup()
     WebSerial.printf("Connected with: %s\n", inet.localIP());
     if (ctx.feature.isMQTTEnabled)
     {
-        static MQTTModule mqttObj("username", "password", "lala.land");
-        mqtt = &mqttObj;
-        if (!mqtt->connect())
+        ctx.mqtt = mqtt.enable();
+        if (!ctx.mqtt->connect())
         {
             Serial.println("Failed to connect broker MQTT");
             WebSerial.println("Failed to connect broker MQTT");
@@ -109,22 +111,10 @@ void setup()
                 else if (feature == FeaturesEnum::MQTT_ON || feature == FeaturesEnum::MQTT_OFF)
                 {
                     ctx.feature.isMQTTEnabled = feature == FeaturesEnum::MQTT_ON ? true : false;
-                    if (ctx.feature.isMQTTEnabled && mqtt == nullptr)
-                    {
-                        static MQTTModule mqttObj("username", "password", "lala.land");
-                        mqtt = &mqttObj;
-                        mqtt->connect();
-                    }
-                    else if (!ctx.feature.isMQTTEnabled && mqtt != nullptr)
-                    {
-                        bool isMQTTDisconnected = mqtt->disconnect();
-                        while (!isMQTTDisconnected)
-                        {
-                            isMQTTDisconnected = mqtt->disconnect();
-                            vTaskDelay(100 / portTICK_PERIOD_MS);
-                        }
-                        mqtt = nullptr;
-                    }
+                    if (ctx.feature.isMQTTEnabled)
+                        ctx.mqtt = mqtt.enable();
+                    else if (!ctx.feature.isMQTTEnabled)
+                        ctx.mqtt->disable(&ctx.mqtt);
                 }
             }
         });

@@ -3,6 +3,7 @@
 
 #include <WiFi.h>
 #include <espMqttClient.h>
+#include "../base_transmitter.h"
 
 class MQTTModule
 {
@@ -16,13 +17,29 @@ private:
     const char *_brokerUrl;
 
     espMqttClient _mqttClient;
+    MQTTModule *_lazyBlueprint = nullptr;
 
 public:
     MQTTModule(
         const char *username, const char *password, const char *brokerUrl)
-        : _username(username), _password(password), _brokerUrl(brokerUrl) {}
+        : _username(username), _password(password), _brokerUrl(brokerUrl)
+    {
+        static MQTTModule blueprint(_username, _password, _brokerUrl);
+        _lazyBlueprint = &blueprint;
+    }
 
-    ~MQTTModule() {}
+    ~MQTTModule() = default;
+
+    MQTTModule *enable() { return _lazyBlueprint; }
+
+    void disable(MQTTModule **ref)
+    {
+        bool isDisconnect = this->disconnect();
+        if (isDisconnect)
+        {
+            *ref = nullptr;
+        }
+    }
 
     bool connect()
     {
