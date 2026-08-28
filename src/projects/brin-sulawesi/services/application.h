@@ -42,6 +42,8 @@ public:
                 {
                 }
 
+                ctx->mqtt->reconnect();
+
                 if ((xTaskGetTickCount() - prevLog) >= pdMS_TO_TICKS(10 * 1000))
                 {
                     prevLog = xTaskGetTickCount();
