@@ -3,8 +3,8 @@
  *
  * Uncomment the devivce that will be build
  */
-#define SIBOB_1
-// #define SIBOB_2
+// #define SIBOB_1
+#define SIBOB_2
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -49,20 +49,6 @@
  */
 #define CHANNEL_PH 0
 #define CHANNEL_SOIL_HUM 1
-
-/**
- * @brief Pinout Configuration
- *
- * Change setpoint of bang-bang control
- * @param TOP_TEMP_SET -> set top cap temperature for fan
- * @param BOT_TEMP_SET -> set bot cap temperature for fan
- * @param TOP_HUM_SET -> set top cap humidity for mist
- * @param BOT_HUM_SET -> set bot cap humiidty for mist
- */
-#define TOP_TEMP_SET 30
-#define BOT_TEMP_SET 25
-#define TOP_HUM_SET 90
-#define BOT_HUM_SET 40
 
 const char *ssid = "NodeSensorWiFi1";
 const char *password = "muhammadnabiyullah";
@@ -141,7 +127,14 @@ DS18B20Sensor ds(1, "WATER TEMP", PIN_DS18);
 
 AnalogController fan(PIN_FAN, 500, 128);
 AnalogController mist(PIN_MIST, 500, 128);
-AnalogController heater(PIN_HEATER, 500, 15);
+AnalogController heater(PIN_HEATER, 500, 128);
+
+BangBangConfig bgConfig{30, 25,  // top temp, bot temp
+                        90, 40}; // top hum, bot hum
+
+BangBangController bang(
+    &bgConfig,
+    ActuatorConfig{PIN_FAN, PIN_MIST, PIN_HEATER}); // pin fan, pin mist, pin heater
 
 static SensorData sensors;
 static bool isCalibrationADS = false;
@@ -217,6 +210,26 @@ void setup()
                     mist.control(value);
                 else if (key == "HEATER")
                     heater.control(value);
+                else if (key == "SET_TOP_TEMP")
+                {
+                    isManualMode = false;
+                    bgConfig.upperTemp = value;
+                }
+                else if (key == "SET_BOT_TEMP")
+                {
+                    isManualMode = false;
+                    bgConfig.bottomTemp = value;
+                }
+                else if (key == "SET_TOP_HUM")
+                {
+                    isManualMode = false;
+                    bgConfig.upperHum = value;
+                }
+                else if (key == "SET_BOT_HUM")
+                {
+                    isManualMode = false;
+                    bgConfig.bottomHum = value;
+                }
                 else
                     WebSerial.printf("Unknown command: %s\n", key.c_str());
 
@@ -342,8 +355,8 @@ void taskOther(void *pv)
             sensors.temperature_air.value = (dhtSensor.getTemperature() / 29.2) * 26.5;
             sensors.humidity_air.value = (dhtSensor.getHumidity() / 64.2) * 27;
             sensors.temperature_soil.value = ds.read();
-            sensors.humidity_soil.value = soilHum.read();
-            sensors.ph.value = phSensor.read();
+            sensors.humidity_soil.value = constrain((soilHum.read() - 2.055f) / (0.843f - 2.055f) * 100.0f, 0, 100);
+            sensors.ph.value = constrain((phSensor.read() * 1000.0F - 626.73) / -28.268 - 5.0, 0, 14);
 #endif // SIBOB_1
 #if defined(SIBOB_2)
             sensors.temperature_air.value = (dhtSensor.getTemperature() / 30.5) * 27.8;
@@ -361,11 +374,6 @@ void taskOther(void *pv)
 
         if (!isManualMode && !(isCalibrationADS || isCalibrationHX711))
         {
-            static BangBangController bang(
-                BangBangConfig{TOP_TEMP_SET, BOT_TEMP_SET, // top temp, bot temp
-                               TOP_HUM_SET, BOT_HUM_SET},  // top hum, bot hum
-                ActuatorConfig{0, 1, 3});                  // pin fan, pin mist, pin heater
-
             const uint32_t now = millis();
             bang.control(
                 sensors.temperature_soil.value,

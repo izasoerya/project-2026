@@ -3,7 +3,7 @@
 
 class BaseSensor
 {
-private:
+protected:
     unsigned char _id;
     const char *_name;
 
@@ -12,6 +12,9 @@ public:
     virtual ~BaseSensor() = default;
 
     virtual float read() = 0;
+
+    unsigned char getId() const { return _id; }
+    const char *getName() const { return _name; }
 };
 
 #endif // BASE_SENSOR_H

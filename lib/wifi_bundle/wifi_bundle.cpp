@@ -30,6 +30,7 @@ bool WiFiBundle::begin(
     {
         delay(500);
         counter++;
+        onProgress();
         if (counter > 40) // 20 second
             onTimeout();
     }

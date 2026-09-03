@@ -1,0 +1,88 @@
+#if !defined(MQTT_MODULE_H)
+#define MQTT_MODULE_H
+
+#include <WiFi.h>
+#include <espMqttClient.h>
+#include "../base_transmitter.h"
+
+class MQTTModule
+{
+private:
+    static const uint8_t _qos = 0;
+    static const bool _retain = false;
+    static const uint16_t _port = 1883;
+
+    const char *_username;
+    const char *_password;
+    const char *_brokerUrl;
+
+    espMqttClient _mqttClient;
+    MQTTModule *_lazyBlueprint = nullptr;
+
+public:
+    MQTTModule(
+        const char *username, const char *password, const char *brokerUrl)
+        : _username(username), _password(password), _brokerUrl(brokerUrl)
+    {
+        static MQTTModule blueprint(_username, _password, _brokerUrl);
+        _lazyBlueprint = &blueprint;
+    }
+
+    ~MQTTModule() = default;
+
+    MQTTModule *enable() { return _lazyBlueprint; }
+
+    void disable(MQTTModule **ref)
+    {
+        bool isDisconnect = this->disconnect();
+        if (isDisconnect)
+        {
+            *ref = nullptr;
+        }
+    }
+
+    bool connect()
+    {
+        _mqttClient.setServer(_brokerUrl, _port);
+        if (!_mqttClient.connect())
+            return false;
+        else
+            return true;
+    }
+
+    bool reconnect()
+    {
+        if (!_mqttClient.connected())
+        {
+            bool success = _mqttClient.connect();
+            return success;
+        }
+    }
+
+    bool disconnect()
+    {
+        bool success = _mqttClient.disconnect();
+        return success;
+    }
+
+    void onMessage(void (*_msgCallback)(const char *topic, const char *payload))
+    {
+        _mqttClient.onMessage(
+            [&](const espMqttClientTypes::MessageProperties &properties,
+                const char *topic, const uint8_t *payload, size_t len,
+                size_t index, size_t total)
+            {
+                char buffer[len + 1];
+                memcpy(buffer, payload, len);
+                buffer[len] = '\0';
+                _msgCallback(topic, buffer);
+            });
+    }
+
+    uint16_t publish(const char *topic, const char *msg)
+    {
+        return _mqttClient.publish(topic, _qos, _retain, msg); // return packet id, packet is 0 if fail
+    }
+};
+
+#endif // MQTT_MODULE_H
