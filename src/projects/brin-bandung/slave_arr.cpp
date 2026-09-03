@@ -13,7 +13,7 @@
 
 const char *ssid = "NodeSensorWiFi1";
 const char *password = "muhammadnabiyullah";
-const char *hostname = "slave-arr-bandung-persemaian-2"; //! RECHECK THIS EVERYTIME COMPILE
+const char *hostname = "slave-arr-bandung-persemaian-1"; //! RECHECK THIS EVERYTIME COMPILE
 WiFiModule wifi(ssid, password, hostname, WIFI_POWER_19_5dBm);
 
 AsyncWebServer server(80);
@@ -35,7 +35,12 @@ ModbusMessage FC06(ModbusMessage request);
 
 DFRobot_RainfallSensor_I2C rainSensor(&Wire);
 
-const uint8_t pinSDA = 7; // TODO: CHANGE TO APPROPRIATE PIN
+/**
+ * @brief Pinout note
+ * - Slave ARR-1 (SDA = 5, SCL = 6)
+ * - Slave ARR-2 (SDA = 7, SCL = 6)
+ */
+const uint8_t pinSDA = 5; // TODO: CHANGE TO APPROPRIATE PIN
 const uint8_t pinSCL = 6; // TODO: CHANGE TO APPROPRIATE PIN
 
 const char *ntpServer = "pool.ntp.org";
@@ -48,12 +53,17 @@ bool shouldRestartNow = false;
 bool shouldResetRainfall = false;
 bool hasResetToday = false;
 
+void scanI2C();
+
 void setup()
 {
     Serial.begin(115200);
 
-    if (wifi.begin())
-        Serial.println(wifi.localIP());
+    wifi.begin(
+        []() -> void
+        { Serial.print("."); },
+        []() -> void
+        { esp_restart(); });
 
     esp_task_wdt_init(60, true);
     esp_task_wdt_add(NULL);
@@ -94,9 +104,9 @@ void setup()
     }
 
     IPAddress wgLocalIP;
-    wgLocalIP.fromString(WG_DEVICE_SLAVE_ARR_LOCAL_IP_2);
+    wgLocalIP.fromString(WG_DEVICE_SLAVE_ARR_LOCAL_IP_1);
     Serial.printf("wg ip: %s\n", wgLocalIP.toString());
-    bool wgOk = wg.begin(wgLocalIP, WG_DEVICE_SLAVE_ARR_PRIVATE_KEY_2,
+    bool wgOk = wg.begin(wgLocalIP, WG_DEVICE_SLAVE_ARR_PRIVATE_KEY_1,
                          WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
     if (wgOk)
     {
@@ -123,6 +133,7 @@ void loop()
         Serial.println("HEARTBEAT");
         WebSerial.println("HEARTBEAT");
         prevTimeReading = millis();
+        scanI2C();
 
         // === SENSOR LOG DATA ===
         modbusData[0] = rainSensor.getRainfall(24); // return in mm/day
@@ -207,53 +218,37 @@ ModbusMessage FC06(ModbusMessage request)
     return response;
 }
 
-// #include <Arduino.h>
-// #include <Wire.h>
+void scanI2C()
+{
+    byte error, address;
+    int nDevices = 0;
 
-// void setup()
-// {
-//     Wire.begin(7, 6);
-//     Serial.begin(115200);
-//     Serial.println("\nI2C Scanner");
-// }
+    for (address = 1; address < 127; address++)
+    {
+        Wire.beginTransmission(address);
+        error = Wire.endTransmission();
 
-// void loop()
-// {
-//     byte error, address;
-//     int nDevices;
-//     Serial.println("Scanning...");
-//     nDevices = 0;
-//     for (address = 1; address < 127; address++)
-//     {
-//         Wire.beginTransmission(address);
-//         error = Wire.endTransmission();
-//         if (error == 0)
-//         {
-//             Serial.print("I2C device found at address 0x");
-//             if (address < 16)
-//             {
-//                 Serial.print("0");
-//             }
-//             Serial.println(address, HEX);
-//             nDevices++;
-//         }
-//         else if (error == 4)
-//         {
-//             Serial.print("Unknow error at address 0x");
-//             if (address < 16)
-//             {
-//                 Serial.print("0");
-//             }
-//             Serial.println(address, HEX);
-//         }
-//     }
-//     if (nDevices == 0)
-//     {
-//         Serial.println("No I2C devices found\n");
-//     }
-//     else
-//     {
-//         Serial.println("done\n");
-//     }
-//     delay(5000);
-// }
+        if (error == 0)
+        {
+            WebSerial.printf("I2C device found at address 0x%02X\n", address);
+            Serial.printf("I2C device found at address 0x%02X\n", address);
+            nDevices++;
+        }
+        else if (error == 4)
+        {
+            WebSerial.printf("Unknown error at address 0x%02X\n", address);
+            Serial.printf("Unknown error at address 0x%02X\n", address);
+        }
+    }
+
+    if (nDevices == 0)
+    {
+        WebSerial.println("No I2C devices found\n");
+        Serial.println("No I2C devices found\n");
+    }
+    else
+    {
+        WebSerial.println("I2C scan complete\n");
+        Serial.println("I2C scan complete\n");
+    }
+}
