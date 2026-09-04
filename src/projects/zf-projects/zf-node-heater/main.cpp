@@ -2,25 +2,29 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266mDNS.h>
 #include <ESPAsyncWebServer.h>
-#include <Ticker.h>
 #include <ElegantOTA.h>
 #include <WebSerial.h>
 
 #include "services/request_job.h"
 #include "models/sensor.h"
 #include "models/actuator_mode.h"
+#include <UniversalTelegramBot.h>
 
 #define FLOOR_ID 1
 #define PIN_RELAY D6
+#define BOT_TOKEN "8738540069:AAG1bONoND4JkHNQ_zHLFNh7c6MGEOITWoU"
+#define CHAT_ID "6720768632"
 
 const char *ssid = "NodeSensorWiFi1";
 const char *password = "muhammadnabiyullah";
-
 void automationTask(Actuator actuator);
 
 AsyncWebServer server(80);
 RequestJob req(FLOOR_ID, automationTask);
-Ticker scheduler;
+
+WiFiClientSecure wClient;
+UniversalTelegramBot bot(BOT_TOKEN, wClient);
+X509List cert(TELEGRAM_CERTIFICATE_ROOT);
 
 void setup()
 {
@@ -30,6 +34,7 @@ void setup()
 
     WiFi.disconnect(true);
     WiFi.mode(WIFI_STA);
+    wClient.setTrustAnchors(&cert);
 
     char hostname[64];
     snprintf(hostname, sizeof(hostname), "zf-node-heater-%d", FLOOR_ID);
@@ -43,6 +48,17 @@ void setup()
         Serial.print(WiFi.status());
         delay(500);
     }
+    configTime(3600 * 7, 0, "pool.ntp.org");
+    time_t now = time(nullptr);
+    int attempts = 0;
+    while (now < 24 * 3600 && attempts < 100) // While time < Jan 2, 1970
+    {
+        delay(100);
+        now = time(nullptr);
+        attempts++;
+    }
+    Serial.printf("Time synced: %s\n", ctime(&now));
+
     IPAddress localIP = WiFi.localIP();
     Serial.printf("Connected with IP: %d.%d.%d.%d\n", localIP[0], localIP[1], localIP[2], localIP[3]);
     MDNS.begin(hostname);
@@ -58,8 +74,6 @@ void setup()
         });
 
     req.begin();
-    scheduler.attach(20, [&]()
-                     { req.requestActuatorData(); });
 }
 
 void automationTask(Actuator actuator)
@@ -69,9 +83,9 @@ void automationTask(Actuator actuator)
     bool actualValue = digitalRead(PIN_RELAY);
     if (prevData != actualValue)
     {
-        // TODO: HANDLE BUG OR NOTIF THE USER
         Serial.println("Discrepancy output detected!");
         WebSerial.println("Discrepancy output detected!");
+        bot.sendMessage(CHAT_ID, "Discrepancy output detected!", "");
     }
 
     Serial.printf("RELAY: %s\n", actualValue ? "OFF" : "ON");
@@ -83,4 +97,11 @@ void loop()
     MDNS.update();
     ElegantOTA.loop();
     WebSerial.loop();
+
+    static uint64_t prevAutomation = 0;
+    if (millis() - prevAutomation > 20000)
+    {
+        prevAutomation = millis();
+        req.requestActuatorData();
+    }
 }
