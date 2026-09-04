@@ -63,9 +63,21 @@ void automationTask(Actuator actuator)
 {
     bool prevData = !actuator.state; // Active Low
     digitalWrite(PIN_RELAY, prevData);
+    bool actualValue = digitalRead(PIN_RELAY);
+    if (prevData != actualValue)
+    {
+        // TODO: HANDLE BUG OR NOTIF THE USER
+        Serial.println("Discrepancy output detected!");
+        WebSerial.println("Discrepancy output detected!");
+    }
 
-    Serial.printf("STATE: %s\n", prevData ? "OFF" : "ON");
-    WebSerial.printf("STATE: %s\n", prevData ? "OFF" : "ON");
+    Serial.printf("RELAY: %s\n", actualValue ? "OFF" : "ON");
+    WebSerial.printf("RELAY: %s\n", actualValue ? "OFF" : "ON");
 }
 
-void loop() {}
+void loop()
+{
+    MDNS.update();
+    ElegantOTA.loop();
+    WebSerial.loop();
+}
