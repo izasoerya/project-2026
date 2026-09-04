@@ -10,16 +10,16 @@
 #include "models/sensor.h"
 #include "models/actuator_mode.h"
 
+#define FLOOR_ID 1
 #define PIN_RELAY D6
 
 const char *ssid = "NodeSensorWiFi1";
 const char *password = "muhammadnabiyullah";
-const char *hostname = "zf-node-heater-1";
 
 void automationTask(Actuator actuator);
 
 AsyncWebServer server(80);
-RequestJob req(automationTask);
+RequestJob req(FLOOR_ID, automationTask);
 Ticker scheduler;
 
 void setup()
@@ -30,6 +30,9 @@ void setup()
 
     WiFi.disconnect(true);
     WiFi.mode(WIFI_STA);
+
+    char hostname[64];
+    snprintf(hostname, sizeof(hostname), "zf-node-heater-%d", FLOOR_ID);
     WiFi.hostname(hostname);
     unsigned char n = WiFi.scanNetworks();
     for (unsigned char i = 0; i < n; i++)

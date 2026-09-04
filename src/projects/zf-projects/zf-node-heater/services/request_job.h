@@ -30,10 +30,11 @@ private:
         "433b141d-b7db-415f-86e0-c42f322dbefg",
         "433b141d-b7db-415f-86e0-c42f322dbefh",
     };
-    const char *_urlSensorReq = "http://172.29.183.12:8000/sensor/find-latest/433b141d-b7db-415f-86e0-c42f322dbeff";
-    const char *_urlActuatorReq = "http://172.29.183.12:8000/actuator/find-latest/433b141d-b7db-415f-86e0-c42f322dbeff";
-    const char *_urlActuatorModeReq = "http://172.29.183.12:8000/actuator-mode/find-latest/433b141d-b7db-415f-86e0-c42f322dbeff";
-    const char *_urlTelegramReq = "telegram_url";
+    const char *_serverAddress = "172.29.183.12:8000";
+    char _urlSensorReq[128];
+    char _urlActuatorReq[128];
+    char _urlActuatorModeReq[128];
+    char _urlTelegramReq[128];
 
     Sensor _latestSensor;
     Actuator _latestActuator;
@@ -47,7 +48,15 @@ private:
     std::function<void(Actuator)> _cb;
 
 public:
-    RequestJob(std::function<void(Actuator)> cb) : _cb(cb) {}
+    RequestJob(uint8_t floor, std::function<void(Actuator)> cb) : _cb(cb)
+    {
+        snprintf(_urlSensorReq, sizeof(_urlSensorReq),
+                 "http://%s/sensor/find-latest/%s", _serverAddress, _floorIds[floor - 1]);
+        snprintf(_urlActuatorReq, sizeof(_urlActuatorReq),
+                 "http://%s/actuator/find-latest/%s", _serverAddress, _floorIds[floor - 1]);
+        snprintf(_urlActuatorModeReq, sizeof(_urlActuatorModeReq),
+                 "http://%s/actuator-mode/find-latest/%s", _serverAddress, _floorIds[floor - 1]);
+    }
     ~RequestJob() {}
 
     void begin()
