@@ -3,6 +3,7 @@
 #include <ElegantOTA.h>
 #include <WebSerial.h>
 
+#include "consts/global_config.h"
 #include "consts/sensors.h"
 #include "services/application.h"
 #include "services/appstate_parser.h"
@@ -10,17 +11,16 @@
 #include "transmitter/configs/mqtt_module.h"
 #include "models/shared_modbus_obj.h"
 
-#define DEVICE_ID 1
+WiFiModule inet(
+    GlobalConfig::ssid,
+    GlobalConfig::password,
+    GlobalConfig::hostname,
+    WIFI_POWER_19_5dBm);
 
-const char *ssid = "NodeSensorWiFi1";
-const char *password = "muhammadnabiyullah";
-const char *hostname = "wtq-1";
-WiFiModule inet(ssid, password, hostname, WIFI_POWER_19_5dBm);
-
-const char *usernameMqtt = "";
-const char *passwordMqtt = "";
-const char *brokerMqtt = "";
-MQTTModule mqtt(usernameMqtt, passwordMqtt, brokerMqtt);
+MQTTModule mqtt(
+    GlobalConfig::usernameMqtt,
+    GlobalConfig::passwordMqtt,
+    GlobalConfig::brokerMqtt);
 
 Modbustatics *turbSensor = nullptr;
 Modbustatics *awlrSensor = nullptr;
@@ -43,7 +43,7 @@ void setup()
     if (firmwareId == 0)
     {
         prefs.begin("app_config", false);
-        prefs.putUChar("id", DEVICE_ID);
+        prefs.putUChar("id", GlobalConfig::deviceID);
         prefs.end();
         esp_restart();
     }
@@ -97,6 +97,7 @@ void setup()
     WebSerial.onMessage(
         [&](uint8_t *data, size_t len)
         {
+            handler.CommonCommand(data, len);
             ctx.state = handler.parseCommand(data, len);
             if (ctx.state == AppState::SET_FEATURE)
             {

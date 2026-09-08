@@ -2,6 +2,7 @@
 #define APP_STATE_PARSER
 
 #include <cstring>
+#include "../consts/global_config.h"
 
 enum AppState
 {
@@ -27,6 +28,39 @@ private:
 public:
     CommandHandler() {}
     ~CommandHandler() {}
+
+    void CommonCommand(uint8_t *data, size_t len)
+    {
+        const uint8_t MAX_WINDOW = 64;
+        static char d[MAX_WINDOW] = {0};
+        if (len < MAX_WINDOW - 1)
+        {
+            memcpy(d, data, len);
+            d[len] = '\0';
+            while (len > 0 && isspace(d[len - 1]))
+                d[--len] = '\0';
+
+            if (strcmp(d, "MYCONFIG") == 0)
+            {
+                char buffer[128];
+                snprintf(buffer, sizeof(buffer),
+                         "ID: \n",
+                         "SSID: %s\nPasssword: %s\nHostname: %s\n",
+                         "MQTT Broker: %s\nUsername: %s\nPassword: %s\n Port: %d",
+                         GlobalConfig::deviceID,
+                         GlobalConfig::ssid, GlobalConfig::password, GlobalConfig::hostname,
+                         GlobalConfig::brokerMqtt, GlobalConfig::usernameMqtt, GlobalConfig::passwordMqtt, GlobalConfig::portMqtt);
+                WebSerial.println(buffer);
+            }
+            else if (strcmp(d, "WIFI_STATUS"))
+            {
+                char buffer[128];
+                snprintf(buffer, sizeof(buffer),
+                         "WiFi: %d, RSSI: %d", WiFi.isConnected(), WiFi.RSSI());
+                WebSerial.println(buffer);
+            }
+        }
+    }
 
     AppState parseCommand(uint8_t *data, size_t len)
     {
