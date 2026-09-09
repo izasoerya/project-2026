@@ -6,67 +6,74 @@
 
 #include "../consts/sensors.h"
 #include "../models/shared_modbus_obj.h"
+#include "../models/sensor_datastore.h"
+
+SensorDataStore globalSensorStore;
+
+static TaskHandle_t mainTaskHandle;
+static TaskHandle_t samplingTaskHandle;
+static TaskHandle_t calibrateHandle;
+static TaskHandle_t notifierTaskHandle;
 
 class Application
 {
-private:
-    static QueueHandle_t _turbidityQueue;
-    static QueueHandle_t _awlrQueue;
-
 public:
-    static void initTask()
+    static void daemonTask(void *pvParam)
     {
-        _turbidityQueue = xQueueCreate(10, sizeof(float));
-        _awlrQueue = xQueueCreate(10, sizeof(float));
-    }
-
-    static void mainTask(void *pvParam)
-    {
-        float receivedTurbidity = 0;
-        float receivedAwlr = 0;
-
-        TickType_t prevLog = xTaskGetTickCount();
+        ApplicationContext *ctx = static_cast<ApplicationContext *>(pvParam);
+        SensorSnapshot current;
         while (1)
         {
+            ctx->mqtt->reconnect();
             ElegantOTA.loop();
             WebSerial.loop();
 
-            ApplicationContext *ctx = static_cast<ApplicationContext *>(pvParam);
-            if (ctx->state == AppState::NORMAL)
+            if (globalSensorStore.getSnapshot(current))
             {
-                if (xQueueReceive(_turbidityQueue, &receivedTurbidity, 0) == pdPASS)
+                if (current.battery < ctx->batteryProfile->getBottomSet()) // Low on battery
                 {
+                    vTaskSuspend(mainTaskHandle);
+                    vTaskSuspend(samplingTaskHandle);
+                    vTaskSuspend(notifierTaskHandle);
                 }
-
-                if (xQueueReceive(_awlrQueue, &receivedAwlr, 0) == pdPASS)
+                else if (current.battery > ctx->batteryProfile->getTopSet()) // Safe to resume
                 {
+                    vTaskResume(mainTaskHandle);
+                    vTaskResume(samplingTaskHandle);
+                    vTaskResume(notifierTaskHandle);
                 }
+            }
 
-                ctx->mqtt->reconnect();
+            vTaskDelay(10 / portTICK_PERIOD_MS);
+        }
+    }
 
-                if ((xTaskGetTickCount() - prevLog) >= pdMS_TO_TICKS(10 * 1000))
+    static void publisherTask(void *pvParam)
+    {
+        ApplicationContext *ctx = static_cast<ApplicationContext *>(pvParam);
+        SensorSnapshot snapshot;
+        while (1)
+        {
+            if (ctx->state == AppState::NORMAL && globalSensorStore.getSnapshot(snapshot))
+            {
+                if (ctx->feature.isMQTTEnabled)
                 {
-                    prevLog = xTaskGetTickCount();
-
                     char buffer[128];
                     snprintf(buffer, sizeof(buffer),
                              "Turbidity: %.1f | AWLR: %.1f",
-                             receivedTurbidity, receivedAwlr);
-                    if (ctx->feature.isMQTTEnabled)
+                             snapshot.turbidity, snapshot.awlr);
+                    uint16_t res = ctx->mqtt->publish("/test", buffer);
+                    if (res == 0)
                     {
-                        uint16_t res = ctx->mqtt->publish("/test", buffer);
-                        if (res == 0)
-                        {
-                            Serial.println("MQTT Publish Failed");
-                            WebSerial.println("MQTT Publish Failed");
-                        }
+                        Serial.println("MQTT Publish Failed");
+                        WebSerial.println("MQTT Publish Failed");
                     }
                     Serial.printf("Success Publish: %s\n", buffer);
                     WebSerial.printf("Success Publish: %s\n", buffer);
                 }
-
-                vTaskDelay(20 / portTICK_PERIOD_MS);
             }
+
+            vTaskDelay(10000 / portTICK_PERIOD_MS);
         }
     }
 
@@ -80,8 +87,9 @@ public:
                 float turbidityRead = ctx->mbTurbidity->read();
                 float awlrRead = ctx->mbAwlr->read();
 
-                xQueueSend(_turbidityQueue, &turbidityRead, pdMS_TO_TICKS(10));
-                xQueueSend(_awlrQueue, &awlrRead, pdMS_TO_TICKS(10));
+                if (globalSensorStore.update(turbidityRead, awlrRead))
+                {
+                }
             }
             vTaskDelay(200 / portTICK_PERIOD_MS);
         }
@@ -116,6 +124,18 @@ public:
                 counter = 0;
             }
             vTaskDelay(50 / portTICK_PERIOD_MS);
+        }
+    }
+
+    static void notifierTask(void *pvParam)
+    {
+        vTaskSuspend(NULL);
+
+        ApplicationContext *ctx = static_cast<ApplicationContext *>(pvParam);
+        while (1)
+        {
+            ctx->mqtt->publish("/test", "Battery Level Warning");
+            vTaskDelay(60000 / portTICK_PERIOD_MS);
         }
     }
 };
