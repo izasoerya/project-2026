@@ -58,11 +58,12 @@ void setup()
     ctx.state = AppState::NORMAL;
     ctx.mbTurbidity = turbSensor;
     ctx.mbAwlr = awlrSensor;
-    prefs.begin("app_config", true);
-    bool mqttRetainOn = prefs.getBool("mqtt_retain_on", 255); // return 255 means no index yet
-    ctx.feature.isMQTTEnabled = mqttRetainOn == 255 ? true : mqttRetainOn;
-    prefs.end();
     ctx.batteryProfile = &batteryProfileDefault;
+
+    static MQTTContext mqttCtx;
+    mqttCtx.isInetnetEnabled = WiFi.isConnected();
+    mqttCtx.isEnabled = true;
+
     Application::init();
 
     // clang-format off
@@ -93,7 +94,7 @@ void setup()
                 }
                 else if (feature == FeaturesEnum::MQTT_ON || feature == FeaturesEnum::MQTT_OFF)
                 {
-                    ctx.feature.isMQTTEnabled = feature == FeaturesEnum::MQTT_ON ? true : false;
+                    mqttCtx.isEnabled = feature == FeaturesEnum::MQTT_ON ? true : false;
                 }
             }
         });
@@ -102,7 +103,7 @@ void setup()
     xTaskCreate(Application::samplingTask, "sampling task", 8192, &ctx, 3, &samplingTaskHandle);
     xTaskCreate(Application::calibrateTask, "calibrate turbidity", 4096, &ctx, 3, &calibrateHandle);
     xTaskCreate(Application::notifierTask, "notifier task", 4096, &ctx, 1, &notifierTaskHandle);
-    xTaskCreate(Application::mqttThreadTask, "mqtt thread task", 4096, &ctx, 1, &mqttThreadTaskHandle);
+    xTaskCreate(Application::mqttThreadTask, "mqtt thread task", 4096, &mqttCtx, 1, &mqttThreadTaskHandle);
 }
 
 void loop() { vTaskDelay(portMAX_DELAY); }

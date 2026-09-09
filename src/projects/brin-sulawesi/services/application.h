@@ -72,14 +72,19 @@ public:
             GlobalConfig::usernameMqtt,
             GlobalConfig::passwordMqtt,
             GlobalConfig::brokerMqtt);
-
         MqttPayload payload;
-        mqtt.connect();
+
+        MQTTContext *ctx = static_cast<MQTTContext *>(pvParam);
+        if (ctx->isEnabled)
+            mqtt.connect();
         while (1)
         {
-            mqtt.reconnect();
-            if (xQueueReceive(_publishMqttQueue, &payload, 0) == pdPASS)
-                mqtt.publish(payload.topic, payload.message);
+            if (ctx->isEnabled)
+            {
+                mqtt.reconnect();
+                if (xQueueReceive(_publishMqttQueue, &payload, 0) == pdPASS)
+                    mqtt.publish(payload.topic, payload.message);
+            }
 
             vTaskDelay(5000 / portTICK_PERIOD_MS);
         }

@@ -13,6 +13,12 @@ struct FeatureState
     bool isMQTTAlwaysEnabled;
 };
 
+struct MQTTContext
+{
+    bool isInetnetEnabled;
+    bool isEnabled;
+};
+
 struct ApplicationContext
 {
     volatile AppState state;
