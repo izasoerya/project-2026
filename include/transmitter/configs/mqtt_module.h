@@ -17,29 +17,15 @@ private:
     const char *_brokerUrl;
 
     espMqttClient _mqttClient;
-    MQTTModule *_lazyBlueprint = nullptr;
 
 public:
     MQTTModule(
         const char *username, const char *password, const char *brokerUrl)
-        : _username(username), _password(password), _brokerUrl(brokerUrl)
-    {
-        static MQTTModule blueprint(_username, _password, _brokerUrl);
-        _lazyBlueprint = &blueprint;
-    }
+        : _username(username), _password(password), _brokerUrl(brokerUrl) {}
 
     ~MQTTModule() = default;
 
-    MQTTModule *enable() { return _lazyBlueprint; }
-
-    void disable(MQTTModule **ref)
-    {
-        bool isDisconnect = this->disconnect();
-        if (isDisconnect)
-        {
-            *ref = nullptr;
-        }
-    }
+    bool isConnected() { return _mqttClient.connected(); }
 
     bool connect()
     {
