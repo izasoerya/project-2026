@@ -14,17 +14,30 @@ static TaskHandle_t mainTaskHandle;
 static TaskHandle_t samplingTaskHandle;
 static TaskHandle_t calibrateHandle;
 static TaskHandle_t notifierTaskHandle;
+static TaskHandle_t mqttThreadTaskHandle;
+
+static QueueHandle_t _publishMqttQueue;
+
+struct MqttPayload
+{
+    const char *topic;
+    const char *message;
+};
 
 class Application
 {
 public:
+    static void init()
+    {
+        _publishMqttQueue = xQueueCreate(10, sizeof(MqttPayload));
+    }
+
     static void daemonTask(void *pvParam)
     {
         ApplicationContext *ctx = static_cast<ApplicationContext *>(pvParam);
         SensorSnapshot current;
         while (1)
         {
-            ctx->mqtt->reconnect();
             ElegantOTA.loop();
             WebSerial.loop();
 
@@ -42,9 +55,33 @@ public:
                     vTaskResume(samplingTaskHandle);
                     vTaskResume(notifierTaskHandle);
                 }
+
+                if (!ctx->feature.isMQTTEnabled)
+                    vTaskSuspend(mqttThreadTaskHandle);
+                else if (ctx->feature.isMQTTEnabled)
+                    vTaskResume(mqttThreadTaskHandle);
             }
 
             vTaskDelay(10 / portTICK_PERIOD_MS);
+        }
+    }
+
+    static void mqttThreadTask(void *pvParam)
+    {
+        MQTTModule mqtt(
+            GlobalConfig::usernameMqtt,
+            GlobalConfig::passwordMqtt,
+            GlobalConfig::brokerMqtt);
+
+        MqttPayload payload;
+        mqtt.connect();
+        while (1)
+        {
+            mqtt.reconnect();
+            if (xQueueReceive(_publishMqttQueue, &payload, 0) == pdPASS)
+                mqtt.publish(payload.topic, payload.message);
+
+            vTaskDelay(5000 / portTICK_PERIOD_MS);
         }
     }
 
@@ -62,14 +99,8 @@ public:
                     snprintf(buffer, sizeof(buffer),
                              "Turbidity: %.1f | AWLR: %.1f",
                              snapshot.turbidity, snapshot.awlr);
-                    uint16_t res = ctx->mqtt->publish("/test", buffer);
-                    if (res == 0)
-                    {
-                        Serial.println("MQTT Publish Failed");
-                        WebSerial.println("MQTT Publish Failed");
-                    }
-                    Serial.printf("Success Publish: %s\n", buffer);
-                    WebSerial.printf("Success Publish: %s\n", buffer);
+                    MqttPayload payload{"/test", buffer};
+                    xQueueSend(_publishMqttQueue, &payload, pdMS_TO_TICKS(10));
                 }
             }
 
@@ -129,12 +160,14 @@ public:
 
     static void notifierTask(void *pvParam)
     {
-        vTaskSuspend(NULL);
-
         ApplicationContext *ctx = static_cast<ApplicationContext *>(pvParam);
+        MqttPayload payload;
         while (1)
         {
-            ctx->mqtt->publish("/test", "Battery Level Warning");
+            payload.topic = "/test";
+            payload.message = "Battery Level Warning";
+            xQueueSend(_publishMqttQueue, &payload, pdMS_TO_TICKS(10));
+
             vTaskDelay(60000 / portTICK_PERIOD_MS);
         }
     }

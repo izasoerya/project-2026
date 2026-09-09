@@ -18,11 +18,6 @@ WiFiModule inet(
     GlobalConfig::hostname,
     WIFI_POWER_19_5dBm);
 
-MQTTModule mqtt(
-    GlobalConfig::usernameMqtt,
-    GlobalConfig::passwordMqtt,
-    GlobalConfig::brokerMqtt);
-
 Modbustatics *turbSensor = nullptr;
 Modbustatics *awlrSensor = nullptr;
 
@@ -68,6 +63,7 @@ void setup()
     ctx.feature.isMQTTEnabled = mqttRetainOn == 255 ? true : mqttRetainOn;
     prefs.end();
     ctx.batteryProfile = &batteryProfileDefault;
+    Application::init();
 
     // clang-format off
     inet.begin( []() { Serial.print("."); },    // On progress
@@ -75,20 +71,6 @@ void setup()
     // clang-format on
     Serial.printf("Connected with: %s\n", inet.localIP());
     WebSerial.printf("Connected with: %s\n", inet.localIP());
-    if (ctx.feature.isMQTTEnabled)
-    {
-        ctx.mqtt = mqtt.enable();
-        if (!ctx.mqtt->connect())
-        {
-            Serial.println("Failed to connect broker MQTT");
-            WebSerial.println("Failed to connect broker MQTT");
-        }
-    }
-    else
-    {
-        Serial.println("MQTT is disabled");
-        WebSerial.println("MQTT is disabled");
-    }
 
     server.begin();
     ElegantOTA.begin(&server);
@@ -112,18 +94,15 @@ void setup()
                 else if (feature == FeaturesEnum::MQTT_ON || feature == FeaturesEnum::MQTT_OFF)
                 {
                     ctx.feature.isMQTTEnabled = feature == FeaturesEnum::MQTT_ON ? true : false;
-                    if (ctx.feature.isMQTTEnabled)
-                        ctx.mqtt = mqtt.enable();
-                    else if (!ctx.feature.isMQTTEnabled)
-                        ctx.mqtt->disable(&ctx.mqtt);
                 }
             }
         });
 
-    xTaskCreate(Application::publisherTask, "main task", 8192, &ctx, 1, &mainTaskHandle);
-    xTaskCreate(Application::samplingTask, "sampling task", 8192, &ctx, 1, &samplingTaskHandle);
-    xTaskCreate(Application::calibrateTask, "calibrate turbidity", 4096, &ctx, 1, &calibrateHandle);
+    xTaskCreate(Application::publisherTask, "publisher task", 8192, &ctx, 2, &mainTaskHandle);
+    xTaskCreate(Application::samplingTask, "sampling task", 8192, &ctx, 3, &samplingTaskHandle);
+    xTaskCreate(Application::calibrateTask, "calibrate turbidity", 4096, &ctx, 3, &calibrateHandle);
     xTaskCreate(Application::notifierTask, "notifier task", 4096, &ctx, 1, &notifierTaskHandle);
+    xTaskCreate(Application::mqttThreadTask, "mqtt thread task", 4096, &ctx, 1, &mqttThreadTaskHandle);
 }
 
 void loop() { vTaskDelay(portMAX_DELAY); }
