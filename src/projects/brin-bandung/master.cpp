@@ -7,8 +7,18 @@
 
 #include "config.h" // .env
 #include "models.h"
+#include "services/ntp_service.h"
 #include "display/display_tft_spi_lcd/display_tft.h"
 #include "transmitter/configs/wifi_module.h"
+#include <ModbusClientRTU.h>
+
+/**
+ * @brief DEVICE SELECTION
+ *
+ * [0] = CISANGKUY
+ * [1] = CIMINYAK
+ */
+#define DEVICE_ID 0
 
 #define TFT_SCK_PIN 8
 #define TFT_MISO_PIN 20
@@ -29,22 +39,14 @@ SupabaseTransport transport = SupabaseTransport(supabaseUrl, supabasePublicKey);
 
 AsyncWebServer server(80);
 WireGuard wg;
+WireGuardConfig wgConfig = wgConfigs[DEVICE_ID];
 
-const char *ntpServer = "pool.ntp.org";
-const uint16_t gmtOffset_sec = 25200;
-const uint16_t daylightOffset_sec = 0;
-
-const char *modbusSlaveUrl = "slave-bandung-persemaian-1";        //! RECHECK THIS EVERYTIME COMPILE
-const char *modbusSlaveArrUrl = "slave-arr-bandung-persemaian-1"; //! RECHECK THIS EVERYTIME COMPILE
-const uint16_t modbusSlavePort = 5000;
-ModbusClientTCPasync *modbusClient = nullptr;
-ModbusClientTCPasync *modbusArrClient = nullptr;
+ModbusClientRTU modbusClient(3);
+ModbusClientRTU modbusArrClient(3);
 void onDataHandler(ModbusMessage response, uint32_t token);
 void onErrorHandler(Error error, uint32_t token);
 void onDataHandlerArr(ModbusMessage response, uint32_t token);
 void onErrorHandlerArr(Error error, uint32_t token);
-
-const uint32_t deviceId = 1; //! RECHECK THIS EVERYTIME COMPILE
 
 uint32_t prevSamplingMillis = 0;
 uint32_t prevSystemLoggingMillis = 0;
@@ -59,19 +61,14 @@ uint8_t errorTransactionModbusArrCounter = 0;
 uint16_t sensorDatas[5];
 uint16_t rainfallGravityData;
 
-#define RAINFALL_GRAVITY
-
-void fetchOpenMeteoData();
-
 void setup()
 {
     Serial.begin(115200);
+    Serial1.begin(9600, SERIAL_8N1, 6, 7);
 
-    if (wifi.begin(
-            []()
-            { Serial.print("."); },
-            []()
-            { esp_restart(); }))
+    if (wifi.begin([]()
+                   { Serial.print("."); }, []()
+                   { esp_restart(); }))
         Serial.printf("Connected to: %s\n", wifi.localIP());
 
     ElegantOTA.begin(&server);
@@ -86,69 +83,27 @@ void setup()
     server.on("/restart", HTTP_GET, [](AsyncWebServerRequest *request)
               { esp_restart(); });
 
-    uint8_t retryCounter = 0;
-    struct tm timeinfo;
-    configTime(gmtOffset_sec, daylightOffset_sec, "pool.ntp.org", "time.google.com");
-    while (!getLocalTime(&timeinfo) && retryCounter < 20)
+    if (NTPService::init())
     {
-        Serial.print(".");
-        delay(500);
-        if (retryCounter >= 20)
-        {
-            Serial.println("\nNTP Sync Failed! Restarting...");
-            ESP.restart(); // Critical: WireGuard handshake will fail without correct time
-        }
-        retryCounter++;
-    }
-
-#if defined(RAINFALL_GRAVITY)
-    IPAddress modbusSlaveArrIP;
-    IPAddress resolvedArr = wifi.resolveMDNS(modbusSlaveArrUrl);
-    if (resolvedArr != IPAddress(0, 0, 0, 0))
-        modbusSlaveArrIP = resolvedArr;
-    else
-    {
-        Serial.println("Failed to expect tipping bucket gravity");    // Continue with cheap tipping bucket
-        WebSerial.println("Failed to expect tipping bucket gravity"); // Continue with cheap tipping bucket
-    }
-#endif // RAINFALL_GRAVITY
-
-    IPAddress modbusSlaveIP;
-    IPAddress resolved = wifi.resolveMDNS(modbusSlaveUrl);
-    if (resolved != IPAddress(0, 0, 0, 0))
-        modbusSlaveIP = resolved;
-    else
-    {
-        Serial.println("Failed to expect slave data");    // Continue with cheap tipping bucket
-        WebSerial.println("Failed to expect slave data"); // Continue with cheap tipping bucket
+        Serial.println("NTP Initialization Error");
+        WebSerial.println("NTP Initialization Error");
     }
 
     IPAddress wgLocalIP;
-    wgLocalIP.fromString(WG_DEVICE_MASTER_LOCAL_IP_1); //! RECHECK THIS EVERYTIME COMPILE
+    wgLocalIP.fromString(wgConfig.slaveLocalIp);
     Serial.printf("wg ip: %s\n", wgLocalIP.toString());
 
-    bool wgOk = wg.begin(wgLocalIP, WG_DEVICE_MASTER_PRIVATE_KEY_1, //! RECHECK THIS EVERYTIME COMPILE
+    bool wgOk = wg.begin(wgLocalIP, wgConfig.masterPrivateKey,
                          WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
     if (wgOk)
         Serial.println("WireGuard successfully initialized on ESP32!");
     else
         Serial.println("WireGuard initialization failed!");
 
-#if defined(RAINFALL_GRAVITY)
-    modbusArrClient = new ModbusClientTCPasync(modbusSlaveArrIP, modbusSlavePort);
-    modbusArrClient->connect();
-    modbusArrClient->onDataHandler(&onDataHandlerArr);
-    modbusArrClient->onErrorHandler(&onErrorHandlerArr);
-    modbusArrClient->setTimeout(10000);
-    modbusArrClient->setIdleTimeout(60000);
-#endif // RAINFALL_GRAVITY
-
-    modbusClient = new ModbusClientTCPasync(modbusSlaveIP, modbusSlavePort);
-    modbusClient->connect();
-    modbusClient->onDataHandler(&onDataHandler);
-    modbusClient->onErrorHandler(&onErrorHandler);
-    modbusClient->setTimeout(10000);
-    modbusClient->setIdleTimeout(60000);
+    modbusClient.onDataHandler(&onDataHandler);
+    modbusClient.onErrorHandler(&onErrorHandler);
+    modbusClient.setTimeout(10000);
+    modbusClient.begin(Serial1);
 
     SPI.begin(TFT_SCK_PIN, TFT_MISO_PIN, TFT_MOSI_PIN, TFT_CS_PIN);
     display.begin();
@@ -172,22 +127,13 @@ void loop()
     {
         prevNTPMillis = millis();
 
-        struct tm timeinfo;
-        if (!getLocalTime(&timeinfo))
+        TimeStruct ts = NTPService::getTime();
+        if (ts.isValid())
         {
-            Serial.println("[ERROR] NTP Error");
-            WebSerial.println("[ERROR] NTP Error");
+            display.setClock(ts.hour, ts.minute, ts.second);
+            display.setSignalStrength(wifi.getRssi());
+            display.refresh();
         }
-        char timeHour[3];
-        char timeMinute[3];
-        char timeSecond[3];
-        strftime(timeHour, 3, "%H", &timeinfo);
-        strftime(timeMinute, 3, "%M", &timeinfo);
-        strftime(timeSecond, 3, "%S", &timeinfo);
-        display.setClock(atoi(timeHour), atoi(timeMinute), atoi(timeSecond));
-
-        display.setSignalStrength(wifi.getRssi());
-        display.refresh();
     }
 
     if (millis() - prevSystemLoggingMillis > 60000 * 60) // Every 1 hour
@@ -195,7 +141,7 @@ void loop()
         prevSystemLoggingMillis = millis();
 
         SystemLogDto systemLog{
-            .deviceId = deviceId,
+            .deviceId = DEVICE_ID + 1,
             .freeHeap = ESP.getFreeHeap(),
             .largestFreeBlock = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT),
             .minFreeHeap = ESP.getMinFreeHeap(),
@@ -219,8 +165,7 @@ void loop()
     {
         prevSamplingMillis = millis();
 
-#if defined(RAINFALL_GRAVITY)
-        Error errArr = modbusArrClient->addRequest(
+        Error errArr = modbusArrClient.addRequest(
             (uint32_t)stampDataModbusArrCounter, // Token
             1, READ_HOLD_REGISTER, 0, 1);
         if (errArr != SUCCESS)
@@ -230,36 +175,9 @@ void loop()
             WebSerial.printf("Error ARR creating request: %02X - %s\n", (int)e, (const char *)e);
         }
         stampDataModbusArrCounter++;
-#endif // RAINFALL_GRAVITY
 
-        // Error err = modbusClient->addRequest(
-        //     (uint32_t)stampDataModbusCounter, // Token
-        //     1, READ_HOLD_REGISTER, 0, 5);
-        // if (err != SUCCESS)
-        // {
-        //     ModbusError e(err);
-        //     Serial.printf("Error creating request: %02X - %s\n", (int)e, (const char *)e);
-        //     WebSerial.printf("Error creating request: %02X - %s\n", (int)e, (const char *)e);
-
-        // }
-        // stampDataModbusCounter++;
-        fetchOpenMeteoData();
-
-#if !defined RAINFALL_GRAVITY
         SensorDto sensor{
-            .deviceId = deviceId,
-            .rainFall = float(sensorDatas[2] / 10.0F),
-            .windSpeed = float(sensorDatas[3] / 10.0F),
-            .windDirection = static_cast<WindDirectionEnum>(sensorDatas[4]),
-            .airTemperature = float(sensorDatas[0] / 10.0F),
-            .airHumidity = float(sensorDatas[1] / 10.0F),
-            .rainFallGravity = float(rainfallGravityData / 10.0F),
-        };
-#endif
-
-#if defined(RAINFALL_GRAVITY)
-        SensorDto sensor{
-            .deviceId = deviceId,
+            .deviceId = DEVICE_ID + 1,
             .rainFall = float(rainfallGravityData / 10.0F),
             .windSpeed = float(sensorDatas[3] / 10.0F),
             .windDirection = static_cast<WindDirectionEnum>(sensorDatas[4]),
@@ -267,8 +185,6 @@ void loop()
             .airHumidity = float(sensorDatas[1] / 10.0F),
             .rainFallGravity = float(rainfallGravityData / 10.0F),
         };
-#endif // RAINFALL_GRAVITY
-
         Serial.println(sensor.toString());
         WebSerial.println(sensor.toString());
 
@@ -289,24 +205,12 @@ void loop()
         display.updateContainerValue(5, buf);
     }
 
-    if (millis() - prevTransmitMillis > 60000 * 60) // Every one hour
+    if (millis() - prevTransmitMillis > 60000 * 5) // Every 5 minute
     {
         prevTransmitMillis = millis();
-#if !defined RAINFALL_GRAVITY
-        SensorDto sensor{
-            .deviceId = deviceId,
-            .rainFall = float(sensorDatas[2] / 10.0F),
-            .windSpeed = float(sensorDatas[3] / 10.0F),
-            .windDirection = static_cast<WindDirectionEnum>(sensorDatas[4]),
-            .airTemperature = float(sensorDatas[0] / 10.0F),
-            .airHumidity = float(sensorDatas[1] / 10.0F),
-            .rainFallGravity = float(rainfallGravityData / 10.0F),
-        };
-#endif
 
-#if defined(RAINFALL_GRAVITY)
         SensorDto sensor{
-            .deviceId = deviceId,
+            .deviceId = DEVICE_ID + 1,
             .rainFall = float(rainfallGravityData / 10.0F),
             .windSpeed = float(sensorDatas[3] / 10.0F),
             .windDirection = static_cast<WindDirectionEnum>(sensorDatas[4]),
@@ -314,7 +218,6 @@ void loop()
             .airHumidity = float(sensorDatas[1] / 10.0F),
             .rainFallGravity = float(rainfallGravityData / 10.0F),
         };
-#endif // RAINFALL_GRAVITY
 
         wifi.setTransport(&transport);
         char buffer[256];
@@ -348,7 +251,7 @@ void onErrorHandler(Error error, uint32_t token)
     WebSerial.printf("[ERROR] token: %d | code: %d\n", token, error);
 
     if (errorTransactionModbusCounter > 10)
-        ESP.restart();
+        esp_restart();
     errorTransactionModbusCounter++;
 }
 
@@ -370,50 +273,4 @@ void onErrorHandlerArr(Error error, uint32_t token)
     if (errorTransactionModbusArrCounter > 10)
         ESP.restart();
     errorTransactionModbusArrCounter++;
-}
-
-void fetchOpenMeteoData()
-{
-    HTTPClient http;
-    const char *endpoint = "https://api.open-meteo.com/v1/forecast?latitude=-7.0500&longitude=107.5500&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m&wind_speed_unit=ms&timezone=Asia%2FJakarta";
-
-    http.begin(endpoint);
-    int httpResponseCode = http.GET();
-
-    if (httpResponseCode == 200)
-    {
-        String payload = http.getString();
-        StaticJsonDocument<512> doc;
-        DeserializationError error = deserializeJson(doc, payload);
-
-        if (error)
-        {
-            Serial.printf("[ERROR] JSON Deserialization failed: %s\n", error.c_str());
-            WebSerial.printf("[ERROR] JSON Deserialization failed: %s\n", error.c_str());
-        }
-        else
-        {
-            float temp = doc["current"]["temperature_2m"];
-            float hum = doc["current"]["relative_humidity_2m"];
-            float precip = doc["current"]["precipitation"];
-            float ws = doc["current"]["wind_speed_10m"];
-            int wd_deg = doc["current"]["wind_direction_10m"];
-
-            sensorDatas[0] = static_cast<uint16_t>(temp * 10.0f);
-            sensorDatas[1] = static_cast<uint16_t>(hum * 10.0f);
-            // sensorDatas[2] = static_cast<uint16_t>(precip * 10.0f);
-            sensorDatas[3] = static_cast<uint16_t>(ws * 10.0f);
-            sensorDatas[4] = static_cast<uint16_t>(((wd_deg + 22) / 45) % 8);
-
-            Serial.println("[INFO] Successfully fetched and mapped Open-Meteo data");
-            WebSerial.println("[INFO] Successfully fetched and mapped Open-Meteo data");
-        }
-    }
-    else
-    {
-        Serial.printf("[ERROR] Open-Meteo HTTP Request failed, code: %d\n", httpResponseCode);
-        WebSerial.printf("[ERROR] Open-Meteo HTTP Request failed, code: %d\n", httpResponseCode);
-    }
-
-    http.end();
 }
