@@ -5,6 +5,7 @@
 #include <sensor/configs/modbus_sensor.h>
 #include "../services/appstate_parser.h"
 #include "./transmitter/configs/mqtt_module.h"
+#include "../models/profile.h"
 
 struct FeatureState
 {
@@ -19,6 +20,7 @@ struct ApplicationContext
     Modbustatics *mbAwlr;
     FeatureState feature;
     MQTTModule *mqtt;
+    Profile *batteryProfile;
     SemaphoreHandle_t mutex;
 
     ApplicationContext()
@@ -29,6 +31,7 @@ struct ApplicationContext
         feature.isMQTTEnabled = true;
         feature.isMQTTAlwaysEnabled = true;
         mqtt = nullptr;
+        batteryProfile = nullptr;
         mutex = xSemaphoreCreateMutex();
     }
 };

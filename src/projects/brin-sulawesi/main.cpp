@@ -5,6 +5,7 @@
 
 #include "consts/global_config.h"
 #include "consts/sensors.h"
+#include "models/profile.h"
 #include "services/application.h"
 #include "services/appstate_parser.h"
 #include "transmitter/configs/wifi_module.h"
@@ -24,15 +25,9 @@ MQTTModule mqtt(
 
 Modbustatics *turbSensor = nullptr;
 Modbustatics *awlrSensor = nullptr;
-QueueHandle_t Application::_turbidityQueue = NULL;
-QueueHandle_t Application::_awlrQueue = NULL;
 
 AsyncWebServer server(80);
 CommandHandler handler;
-
-TaskHandle_t mainTaskHandle;
-TaskHandle_t samplingTaskHandle;
-TaskHandle_t calibrateHandle;
 
 void setup()
 {
@@ -59,6 +54,11 @@ void setup()
         if (awlr_list[i].getId() == firmwareId)
             awlrSensor = &awlr_list[i];
     }
+
+    const float batteryDangerLevel = 11.75;
+    const float batteryWarningLevel = 12.0;
+    Profile batteryProfileDefault(batteryDangerLevel, batteryWarningLevel);
+
     static ApplicationContext ctx; // Mutex lock context variable
     ctx.state = AppState::NORMAL;
     ctx.mbTurbidity = turbSensor;
@@ -67,7 +67,7 @@ void setup()
     bool mqttRetainOn = prefs.getBool("mqtt_retain_on", 255); // return 255 means no index yet
     ctx.feature.isMQTTEnabled = mqttRetainOn == 255 ? true : mqttRetainOn;
     prefs.end();
-    Application::initTask();
+    ctx.batteryProfile = &batteryProfileDefault;
 
     // clang-format off
     inet.begin( []() { Serial.print("."); },    // On progress
@@ -120,9 +120,10 @@ void setup()
             }
         });
 
-    xTaskCreate(Application::mainTask, "main task", 8192, &ctx, 1, &mainTaskHandle);
+    xTaskCreate(Application::publisherTask, "main task", 8192, &ctx, 1, &mainTaskHandle);
     xTaskCreate(Application::samplingTask, "sampling task", 8192, &ctx, 1, &samplingTaskHandle);
     xTaskCreate(Application::calibrateTask, "calibrate turbidity", 4096, &ctx, 1, &calibrateHandle);
+    xTaskCreate(Application::notifierTask, "notifier task", 4096, &ctx, 1, &notifierTaskHandle);
 }
 
 void loop() { vTaskDelay(portMAX_DELAY); }
