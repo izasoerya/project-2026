@@ -6,9 +6,11 @@
 #include "../models/task_context.h"
 #include "../datastore/sensor_datastore.h"
 #include "../utils/parser.h"
+#include "nvs_manager.h"
 
 TaskHandle_t handleReadRainfall;
 TaskHandle_t handleMBSlave;
+TaskHandle_t handleDaemon;
 
 SensorDatastore singletonSensor;
 QueueHandle_t queueSensorDatastore;
@@ -41,6 +43,12 @@ public:
         Wire.begin(ctx->pinSDA, ctx->pinSCL);
         if (rainSensor.begin())
         {
+            float lastRainValue = NVSManager::getRainfall();
+            if (lastRainValue != -1)
+                rainSensor.setRainAccumulatedValue(lastRainValue);
+        }
+        else
+        {
             // TODO: HANDLE IF RAINFALL SENSOR FAIL
         }
 
@@ -54,12 +62,20 @@ public:
             {
                 xQueueSend(queueSensorDatastore, &singletonSensor, pdMS_TO_TICKS(10));
                 Serial.println("Success to send sensor datastore to queue");
+
+                float lastRainfallValue = NVSManager::getRainfall();
+                if (lastRainfallValue != snapshot.rainfall)
+                    NVSManager::storeRainfall(snapshot.rainfall);
             }
             else
             {
                 Serial.println("Failed to send sensor datastore to queue");
                 // TODO: HANDLING WHEN PUSH QUEUE FAILING
             }
+
+            TimeStruct ts = NTPService::getTime();
+            if (ts.hour == 0 && ts.minute == 0)
+                rainSensor.setRainAccumulatedValue(0);
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
