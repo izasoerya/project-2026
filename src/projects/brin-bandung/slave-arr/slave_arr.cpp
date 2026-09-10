@@ -23,14 +23,6 @@ AsyncWebServer server(80);
 WireGuard wg;
 WireGuardConfig wgConfig = wgConfigs[DEVICE_ID];
 
-/**
- * @brief Pinout note
- * - Slave ARR-1 (SDA = 5, SCL = 6)
- * - Slave ARR-2 (SDA = 7, SCL = 6)
- */
-const uint8_t pinSDA = 5; // TODO: CHANGE TO APPROPRIATE PIN
-const uint8_t pinSCL = 6; // TODO: CHANGE TO APPROPRIATE PIN
-
 void setup()
 {
     Serial.begin(115200);
@@ -61,8 +53,11 @@ void setup()
         // TODO: HANDLE IF WG FAIL
     }
 
-    static contextRainfall ctx(Wire);
-    xTaskCreate(Application::taskReadRainfall, "sampling WD task", 8192, &ctx, 3, &handleReadRainfall);
+    static contextRainfall rainCtx(Wire);
+    static contextMB mbCtx(Serial0);
+    xTaskCreate(Application::taskReadRainfall, "sampling WD task", 8192, &rainCtx, 3, &handleReadRainfall);
+    xTaskCreate(Application::taskMBSlave, "modbus slave task", 8192, &mbCtx, 2, &handleMBSlave);
+    xTaskCreate(Application::taskDaemon, "daemon", 4096, nullptr, 1, &handleDaemon);
 }
 
 void loop() { vTaskDelay(portMAX_DELAY); }
