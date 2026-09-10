@@ -40,7 +40,7 @@ public:
     static void taskReadWD(void *pvParam)
     {
         contextWD *wdCtx = static_cast<contextWD *>(pvParam);
-        Serial2.begin(9600, SERIAL_8N1, wdCtx->pinRX, wdCtx->pinTX);
+        Serial1.begin(9600, SERIAL_8N1, wdCtx->pinRX, wdCtx->pinTX);
 
         while (1)
         {
@@ -115,7 +115,7 @@ public:
         ModbusServerRTU mbServer(2000); // Timeout 2000ms
         SensorObject payload;
 
-        Serial1.begin(9600, SERIAL_8N1, mbCtx->pinRX, mbCtx->pinTX);
+        Serial0.begin(9600, SERIAL_8N1, mbCtx->pinRX, mbCtx->pinTX);
         mbServer.registerWorker(0x01, READ_HOLD_REGISTER, [mbCtx](ModbusMessage request)
                                 { return mbCtx->FC03(request); });
         mbServer.registerWorker(0x01, WRITE_HOLD_REGISTER, [mbCtx](ModbusMessage request)

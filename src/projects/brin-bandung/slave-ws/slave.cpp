@@ -64,8 +64,8 @@ void setup()
     }
 
     static contextTHWS sensorCtx(Wire);
-    static contextMB mbCtx(Serial1);
-    static contextWD wdCtx(Serial2);
+    static contextMB mbCtx(Serial0);
+    static contextWD wdCtx(Serial1);
 
     xTaskCreate(Application::taskReadTHWS, "sampling THWS task", 8192, &sensorCtx, 2, &handleReadTHWS);
     xTaskCreate(Application::taskReadWD, "sampling WD task", 8192, &wdCtx, 3, &handleReadWD);
