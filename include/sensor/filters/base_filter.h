@@ -5,7 +5,7 @@ class BaseFilter
 {
 public:
     virtual ~BaseFilter() = default;
-    virtual void filter(float &raw) = 0; // Pass by reference to modify in-place
+    virtual float filter(float &raw) = 0; // Pass by reference to modify in-place
 };
 
 #endif // BASE_FILTER_H
