@@ -27,7 +27,7 @@ public:
         const uint16_t gmtOffset_sec = 25200;
         const uint16_t daylightOffset_sec = 0;
 
-        if (WiFi.isConnected())
+        if (!WiFi.isConnected())
             return false;
         uint8_t retryCounter = 0;
         struct tm timeinfo;
