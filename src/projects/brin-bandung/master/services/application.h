@@ -51,7 +51,7 @@ public:
         SensorRainfallObject sensor;
         uint32_t stampMBCounter = 0;
 
-        Serial1.begin(9600, SERIAL_8N1, ctx->pinRX, ctx->pinTX);
+        ctx->serial.begin(9600, SERIAL_8N1, ctx->pinRX, ctx->pinTX);
         mb.onDataHandler([&ctx](ModbusMessage response, uint32_t token)
                          { ctx->onDataIncoming(response, token); });
         mb.onErrorHandler([&ctx](Error error, uint32_t token)
@@ -78,7 +78,7 @@ public:
         SensorWSObject sensor;
         uint32_t stampMBCounter = 0;
 
-        Serial1.begin(9600, SERIAL_8N1, ctx->pinRX, ctx->pinTX);
+        ctx->serial.begin(9600, SERIAL_8N1, ctx->pinRX, ctx->pinTX);
         mb.onDataHandler([&ctx](ModbusMessage response, uint32_t token)
                          { ctx->onDataIncoming(response, token); });
         mb.onErrorHandler([&ctx](Error error, uint32_t token)
