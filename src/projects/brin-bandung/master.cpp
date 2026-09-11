@@ -7,7 +7,7 @@
 
 #include "config.h" // .env
 #include "models.h"
-#include "services/ntp_service.h"
+#include "utils/ntp_service.h"
 #include "display/display_tft_spi_lcd/display_tft.h"
 #include "transmitter/configs/wifi_module.h"
 #include <ModbusClientRTU.h>

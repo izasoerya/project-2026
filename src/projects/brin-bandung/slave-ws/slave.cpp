@@ -9,7 +9,7 @@
 #include "../config.h" // .env
 #include "../utils/parser.h"
 #include "../utils/utils.h"
-#include "../services/ntp_service.h"
+#include "../utils/ntp_service.h"
 #include "transmitter/configs/wifi_module.h"
 #include "services/application.h"
 

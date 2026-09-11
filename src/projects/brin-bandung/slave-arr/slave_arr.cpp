@@ -8,7 +8,7 @@
 #include <DFRobot_RainfallSensor.h>
 
 #include "../config.h" // .env
-#include "../services/ntp_service.h"
+#include "../utils/ntp_service.h"
 #include "services/application.h"
 #include "transmitter/configs/wifi_module.h"
 
