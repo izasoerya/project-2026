@@ -16,25 +16,26 @@
 
 const char *ssid = "NodeSensorWiFi1";
 const char *password = "muhammadnabiyullah";
-const char *hostname = "slave-arr-bandung-persemaian-1"; //! RECHECK THIS EVERYTIME COMPILE
-WiFiModule wifi(ssid, password, hostname, WIFI_POWER_19_5dBm);
-
-AsyncWebServer server(80);
-WireGuard wg;
-WireGuardConfig wgConfig = wgConfigs[DEVICE_ID];
 
 void setup()
 {
     Serial.begin(115200);
 
+    char hostname[64];
+    snprintf(hostname, sizeof(hostname), "slave-arr-bandung-persemaian-%d.local", DEVICE_ID + 1);
+    WiFiModule wifi(ssid, password, hostname, WIFI_POWER_19_5dBm);
     if (wifi.begin([]() -> void
                    { Serial.print("."); }, []() -> void
                    { esp_restart(); }))
         Serial.printf("Connected with IP: %s", wifi.localIP());
 
+    WireGuard wg;
+    WireGuardConfig wgConfig = wgConfigs[DEVICE_ID];
     ElegantOTA.setAutoReboot(true);
     ElegantOTA.onEnd([](bool success)
                      {if (success) esp_restart(); });
+
+    AsyncWebServer server(80);
     ElegantOTA.begin(&server);
     WebSerial.begin(&server);
     server.begin();
