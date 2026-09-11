@@ -100,11 +100,7 @@ public:
 
     static void taskSendSupabase(void *pvParam)
     {
-        WiFiModule *wifi = static_cast<WiFiModule *>(pvParam);
-        const char *supabaseUrl = "https://pykernnkhvnssplhzcvn.supabase.co";
-        const char *supabasePublicKey = "sb_publishable_coDPUa845ZtfYmoBWlZlgw_eH5vsCY7";
-        SupabaseTransport transport = SupabaseTransport(supabaseUrl, supabasePublicKey);
-
+        contextPublisher *ctx = static_cast<contextPublisher *>(pvParam);
         static SensorWSObject ws;
         static SensorRainfallObject rain;
         static SensorPublishableObject sensor;
@@ -133,10 +129,10 @@ public:
             {
                 lastSendTime = millis();
 
-                wifi->setTransport(&transport);
+                ctx->wifi.setTransport(&ctx->transport);
                 char buffer[256];
                 sensor.toJson(buffer, sizeof(buffer));
-                int16_t response = wifi->send("sensors", buffer);
+                int16_t response = ctx->wifi.post("sensors", buffer);
                 if (response != 200 && response != 201)
                 {
                     // TODO: HANDLE SENSOR SEND FAIL

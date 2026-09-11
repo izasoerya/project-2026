@@ -2,9 +2,10 @@
 #define TASK_CONTEXT_H
 
 #include <HardwareSerial.h>
+#include <ModbusMessage.h>
 #include <Wire.h>
 #include "../utils/utils.h"
-#include <ModbusMessage.h>
+#include "wifi_bundle.h"
 
 struct contextMBWS
 {
@@ -70,6 +71,16 @@ struct contextMBRainfall
             esp_restart();
         errorTransactionModbusCounter++;
     }
+};
+
+struct contextPublisher
+{
+    WiFiBundle &wifi;
+    const char *supabaseUrl = "https://pykernnkhvnssplhzcvn.supabase.co";
+    const char *supabasePublicKey = "sb_publishable_coDPUa845ZtfYmoBWlZlgw_eH5vsCY7";
+    SupabaseTransport transport = SupabaseTransport(supabaseUrl, supabasePublicKey);
+
+    contextPublisher(WiFiBundle &w) : wifi(w) {}
 };
 
 struct contextDisplay
