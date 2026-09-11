@@ -23,22 +23,23 @@
 
 const char *ssid = "NodeSensorWiFi1";
 const char *password = "muhammadnabiyullah";
-const char *hostname = "slave-bandung-persemaian-2";
-WiFiModule wifi(ssid, password, hostname, WIFI_POWER_19_5dBm);
-
-WireGuard wg;
-AsyncWebServer server(80);
-WireGuardConfig wgConfig = wgConfigs[DEVICE_ID];
-Application app;
 
 void setup()
 {
     Serial.begin(115200);
+
+    char hostname[64];
+    snprintf(hostname, sizeof(hostname), "slave-arr-bandung-persemaian-%d.local", DEVICE_ID + 1);
+    WiFiModule wifi(ssid, password, hostname, WIFI_POWER_19_5dBm);
     if (wifi.begin([]()
                    { Serial.println("."); }, []()
                    { esp_restart(); }))
         Serial.println(wifi.localIP());
 
+    WireGuard wg;
+    AsyncWebServer server(80);
+    WireGuardConfig wgConfig = wgConfigs[DEVICE_ID];
+    Application app;
     ElegantOTA.setAutoReboot(true);
     ElegantOTA.begin(&server);
     ElegantOTA.onEnd([](bool success)
@@ -46,27 +47,23 @@ void setup()
     WebSerial.begin(&server);
     server.begin();
 
-    NTPService::init();
+    if (NTPService::init())
+    {
+        // TODO: HANDLE IF NTP FAIL
+    }
     IPAddress wgLocalIP;
     wgLocalIP.fromString(wgConfig.slave.localIp);
     Serial.printf("wg ip: %s\n", wgLocalIP.toString());
     bool wgOk = wg.begin(wgLocalIP, wgConfig.slave.privateKey,
                          WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
-    if (wgOk)
+    if (!wgOk)
     {
-        Serial.println("WireGuard successfully initialized on ESP32!");
-        WebSerial.println("WireGuard successfully initialized on ESP32!");
-    }
-    else
-    {
-        Serial.println("WireGuard initialization failed!");
-        WebSerial.println("WireGuard initialization failed!");
+        // TODO: HANDLE IF WIREGUARD FAIL
     }
 
     static contextTHWS sensorCtx(Wire);
     static contextMB mbCtx(Serial0);
     static contextWD wdCtx(Serial1);
-
     xTaskCreate(Application::taskReadTHWS, "sampling THWS task", 8192, &sensorCtx, 2, &handleReadTHWS);
     xTaskCreate(Application::taskReadWD, "sampling WD task", 8192, &wdCtx, 3, &handleReadWD);
     xTaskCreate(Application::taskMBSlave, "modbus slave task", 8192, &mbCtx, 1, &handleMBSlave);
