@@ -52,16 +52,59 @@ int8_t WiFiBundle::getdBm()
     return WiFi.RSSI();
 }
 
-void WiFiBundle::reconnect()
+bool WiFiBundle::reconnect(
+    bool blocking = true,
+    std::function<void(bool)> *onResult = nullptr)
 {
     const uint32_t currentTime = millis();
-    while (millis() < currentTime + 5000)
-        if (WiFi.status() == WL_CONNECTED)
-            return;
 
-    WiFi.disconnect(true); // force clean state
-    delay(100);
-    begin(*onProgress, *onTimeout);
+    if (blocking)
+    {
+        while (millis() < currentTime + 5000)
+            if (WiFi.status() == WL_CONNECTED)
+                return true;
+
+        if (WiFi.disconnect())
+        {
+            bool connected = begin(*onProgress, *onTimeout);
+            return connected;
+        }
+        return false;
+    }
+    else
+    {
+        struct ReconnectParam
+        {
+            WiFiBundle *bundle;
+            std::function<void(bool)> callback;
+        };
+        xTaskCreate([](void *pvParam)
+                    {
+                    ReconnectParam *p = static_cast<ReconnectParam*>(pvParam);
+                    WiFi.disconnect();
+                    p->bundle->begin(*p->bundle->onProgress, *p->bundle->onTimeout);
+                    
+                    const uint32_t start = millis();
+                    while (millis() - start < 30000) {
+                        if (WiFi.status() == WL_CONNECTED) {
+                            if (p->callback != nullptr) p->callback(true);
+                            delete p;
+                            vTaskDelete(nullptr);
+                            return;
+                        }
+                        vTaskDelay(pdMS_TO_TICKS(500));
+                    }
+                    
+                    if (p->callback != nullptr) p->callback(false);
+                    delete p;
+                    vTaskDelete(nullptr); },
+                    "Reconnect", 2048, new ReconnectParam{.bundle = this, .callback = *onResult}, 8, nullptr);
+    }
+}
+
+bool WiFiBundle::disconnect()
+{
+    return WiFi.disconnect();
 }
 
 int WiFiBundle::post(const char *url, const char *payload)

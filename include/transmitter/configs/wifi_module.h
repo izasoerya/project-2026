@@ -23,6 +23,9 @@ private:
     SupabaseTransport *supabaseConfig = nullptr;
     wifi_power_t _txCConfig;
 
+    const std::function<void()> *_onProgress;
+    const std::function<void()> *_onTimeout;
+
 public:
     WiFiModule(
         const char *ssid, const char *password, const char *hostname,
@@ -35,19 +38,14 @@ public:
         return _inet.localIP();
     }
 
-    void setTransport(BasicHTTPTransport *basicTransport)
-    {
-        basicConfig = basicTransport;
-    }
-
-    void setTransport(SupabaseTransport *supabaseTransport)
-    {
-        supabaseConfig = supabaseTransport;
-    }
+    void setTransport(BasicHTTPTransport *basicTransport) { basicConfig = basicTransport; }
+    void setTransport(SupabaseTransport *supabaseTransport) { supabaseConfig = supabaseTransport; }
 
     bool begin(const std::function<void()> &onProgress,
                const std::function<void()> &onTimeout)
     {
+        _onProgress = &onProgress;
+        _onTimeout = &onTimeout;
         if (_inet.begin(onProgress, onTimeout)) // Restart on fail set to true
             return true;
         return false;
@@ -68,9 +66,14 @@ public:
         return IPAddress(0, 0, 0, 0); // Explicit failure
     }
 
-    void reconnect()
+    bool reconnect(bool blocking, std::function<void(bool)> *onResult = nullptr)
     {
-        _inet.reconnect();
+        bool connected = _inet.reconnect(blocking, onResult);
+        if (!connected)
+        {
+            _inet.disconnect();
+            _inet.begin(*_onProgress, *_onTimeout);
+        }
     }
 
     int8_t getRssi()

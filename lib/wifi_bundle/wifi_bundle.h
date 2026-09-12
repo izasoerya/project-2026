@@ -21,7 +21,8 @@ public:
         const std::function<void()> &onTimeout);
     const char *localIP();
     int8_t getdBm();
-    void reconnect();
+    bool reconnect(bool blocking, std::function<void(bool)> *onResult = nullptr);
+    bool disconnect();
 
     void setTxPower(wifi_power_t config) { WiFi.setTxPower(config); }
     void setTransport(DataTransport *transport) { _transport = transport; }
