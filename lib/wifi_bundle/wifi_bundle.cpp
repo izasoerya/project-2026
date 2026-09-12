@@ -90,7 +90,6 @@ bool WiFiBundle::reconnect(
                             if (p->callback != nullptr) p->callback(true);
                             delete p;
                             vTaskDelete(nullptr);
-                            return;
                         }
                         vTaskDelay(pdMS_TO_TICKS(500));
                     }
@@ -98,7 +97,9 @@ bool WiFiBundle::reconnect(
                     if (p->callback != nullptr) p->callback(false);
                     delete p;
                     vTaskDelete(nullptr); },
-                    "Reconnect", 2048, new ReconnectParam{.bundle = this, .callback = *onResult}, 8, nullptr);
+                    "Reconnect", 2048,
+                    new ReconnectParam{.bundle = this, .callback = onResult ? *onResult : std::function<void(bool)>()},
+                    8, nullptr);
     }
 }
 
