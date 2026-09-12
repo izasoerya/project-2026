@@ -3,6 +3,7 @@
 
 #include <ModbusClientRTU.h>
 #include <TFT_eSPI.h>
+#include <functional>
 #include <display/display_tft_spi_lcd/display_tft.h>
 #include "../../include/sensor/filters/moving_average.h"
 #include "../../include/transmitter/configs/wifi_module.h"
@@ -35,10 +36,32 @@ public:
 
     static void taskDaemon(void *pvParam)
     {
+        contextDaemon *ctx = static_cast<contextDaemon *>(pvParam);
         while (1)
         {
             TimeStruct ts = NTPService::getTime();
             Serial.printf("Time: %d:%d:%d\n", ts.hour, ts.minute, ts.second);
+
+            static uint32_t prevCheckNTP = 0;
+            static uint32_t prevCheckInternet = 0;
+            if (ctx->getNTPStatus() == FeatureStatus::NTP && millis() - prevCheckNTP > 60000)
+            {
+                prevCheckNTP = millis();
+                if (NTPService::init())
+                    ctx->setNTPStatus(FeatureStatus::WORKING);
+            }
+            else if (ctx->getInternetStatus() == FeatureStatus::INTERNET && millis() - prevCheckInternet > 5000)
+            {
+                prevCheckInternet = millis();
+                std::function<void(bool)> reconnectCallback = [ctx](bool c)
+                {
+                    if (c)
+                        ctx->setInternetStatus(FeatureStatus::WORKING);
+                    else
+                        ctx->setInternetStatus(FeatureStatus::INTERNET);
+                };
+                ctx->wifi.reconnect(false, &reconnectCallback);
+            }
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
@@ -132,7 +155,7 @@ public:
                 ctx->wifi.setTransport(&ctx->transport);
                 char buffer[256];
                 sensor.toJson(buffer, sizeof(buffer));
-                int16_t response = ctx->wifi.post("sensors", buffer);
+                int16_t response = ctx->wifi.send("sensors", buffer);
                 if (response != 200 && response != 201)
                 {
                     // TODO: HANDLE SENSOR SEND FAIL

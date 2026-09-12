@@ -26,6 +26,12 @@ void setup()
                    { esp_restart(); }))
         Serial.printf("Connected with IP: %s", wifi.localIP());
 
+    static contextMBWS wsCtx(Serial0);
+    static contextMBRainfall rainCtx(Serial1);
+    static contextDisplay displayCtx(SPI);
+    static contextDaemon daemonCtx(wifi);
+    static contextPublisher publisherCtx(wifi);
+
     WireGuard wg;
     WireGuardConfig wgConfig = wgConfigs[DEVICE_ID];
     ElegantOTA.setAutoReboot(true);
@@ -38,27 +44,21 @@ void setup()
     server.begin();
 
     if (NTPService::init())
-    {
-        // TODO: HANDLE IF NTP FAIL
-    }
+        daemonCtx.setNTPStatus(FeatureStatus::NTP);
+
     IPAddress wgLocalIP;
     wgLocalIP.fromString(wgConfig.master.localIp);
     Serial.printf("wg ip: %s\n", wgLocalIP.toString());
     bool wgOk = wg.begin(wgLocalIP, wgConfig.master.privateKey,
                          WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
     if (!wgOk)
-    {
-        // TODO: HANDLE IF WG FAIL
-    }
+        daemonCtx.setWireGuardStatus(FeatureStatus::WIREGUARD);
 
-    static contextMBWS wsCtx(Serial0);
-    static contextMBRainfall rainCtx(Serial1);
-    static contextDisplay displayCtx(SPI);
     xTaskCreate(Application::taskReadRainfall, "sampling WD task", 4096, &rainCtx, 3, &handleReadRainfall);
     xTaskCreate(Application::taskReadWS, "modbus read rainfall slave task", 4096, &wsCtx, 2, &handleMBSlave);
-    xTaskCreate(Application::taskDaemon, "daemon task", 4096, nullptr, 1, &handleDaemon);
+    xTaskCreate(Application::taskDaemon, "daemon task", 4096, &daemonCtx, 1, &handleDaemon);
     xTaskCreate(Application::taskDisplayDashboard, "display dashboard task", 4096, &displayCtx, 2, &handleDisplay);
-    xTaskCreate(Application::taskSendSupabase, "send supabase task", 8192, &wifi, 1, &handlePublish);
+    xTaskCreate(Application::taskSendSupabase, "send supabase task", 8192, &publisherCtx, 1, &handlePublish);
 }
 
 void loop() { vTaskDelay(portMAX_DELAY); }

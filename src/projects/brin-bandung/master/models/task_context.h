@@ -5,7 +5,26 @@
 #include <ModbusMessage.h>
 #include <Wire.h>
 #include "../utils/utils.h"
+#include "../utils/enum.h"
 #include "wifi_bundle.h"
+
+struct contextDaemon
+{
+    WiFiModule &wifi;
+    FeatureStatus feature[4];
+
+    contextDaemon(WiFiModule &w) : wifi(w) {}
+
+    void setNTPStatus(FeatureStatus v) { feature[0] = v; }
+    void setInternetStatus(FeatureStatus v) { feature[1] = v; }
+    void setMQTTStatus(FeatureStatus v) { feature[2] = v; }
+    void setWireGuardStatus(FeatureStatus v) { feature[3] = v; }
+
+    FeatureStatus getNTPStatus() { return feature[0]; }
+    FeatureStatus getInternetStatus() { return feature[1]; }
+    FeatureStatus getMQTTStatus() { return feature[2]; }
+    FeatureStatus getWireGuardStatus() { return feature[3]; }
+};
 
 struct contextMBWS
 {
@@ -75,12 +94,12 @@ struct contextMBRainfall
 
 struct contextPublisher
 {
-    WiFiBundle &wifi;
+    WiFiModule &wifi;
     const char *supabaseUrl = "https://pykernnkhvnssplhzcvn.supabase.co";
     const char *supabasePublicKey = "sb_publishable_coDPUa845ZtfYmoBWlZlgw_eH5vsCY7";
     SupabaseTransport transport = SupabaseTransport(supabaseUrl, supabasePublicKey);
 
-    contextPublisher(WiFiBundle &w) : wifi(w) {}
+    contextPublisher(WiFiModule &w) : wifi(w) {}
 };
 
 struct contextDisplay
