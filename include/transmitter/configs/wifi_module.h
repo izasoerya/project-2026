@@ -69,11 +69,7 @@ public:
     bool reconnect(bool blocking, std::function<void(bool)> *onResult = nullptr)
     {
         bool connected = _inet.reconnect(blocking, onResult);
-        if (!connected)
-        {
-            _inet.disconnect();
-            _inet.begin(*_onProgress, *_onTimeout);
-        }
+        return connected;
     }
 
     int8_t getRssi()

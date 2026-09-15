@@ -54,7 +54,7 @@ int8_t WiFiBundle::getdBm()
 
 bool WiFiBundle::reconnect(
     bool blocking = true,
-    std::function<void(bool)> *onResult = nullptr)
+    std::function<void(bool)> *onResult)
 {
     const uint32_t currentTime = millis();
 
@@ -100,6 +100,7 @@ bool WiFiBundle::reconnect(
                     "Reconnect", 2048,
                     new ReconnectParam{.bundle = this, .callback = onResult ? *onResult : std::function<void(bool)>()},
                     8, nullptr);
+        return true;
     }
 }
 
