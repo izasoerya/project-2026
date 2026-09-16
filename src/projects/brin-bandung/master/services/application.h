@@ -29,39 +29,52 @@ class Application
 public:
     static void init()
     {
-        queueSensorRainfall = xQueueCreate(10, sizeof(singletonSensorRainfall));
-        queueSensorWS = xQueueCreate(10, sizeof(singletonSensorWS));
-        queueSensorDashboard = xQueueCreate(10, sizeof(singletonSensorWS));
+        queueSensorRainfall = xQueueCreate(10, sizeof(SensorRainfallObject));
+        queueSensorWS = xQueueCreate(10, sizeof(SensorWSObject));
+        queueSensorDashboard = xQueueCreate(10, sizeof(SensorPublishableObject));
     }
 
     static void taskDaemon(void *pvParam)
     {
         contextDaemon *ctx = static_cast<contextDaemon *>(pvParam);
+        static uint32_t prevReconnect = millis();
+        static uint32_t prevCheckNTP = millis();
+
         while (1)
         {
             TimeStruct ts = NTPService::getTime();
             Serial.printf("Time: %d:%d:%d\n", ts.hour, ts.minute, ts.second);
 
-            static uint32_t prevCheckNTP = 0;
-            static uint32_t prevCheckInternet = 0;
             if (ctx->getNTPStatus() == FeatureStatus::NTP && millis() - prevCheckNTP > 60000)
             {
                 prevCheckNTP = millis();
                 if (NTPService::init())
                     ctx->setNTPStatus(FeatureStatus::WORKING);
             }
-            else if (ctx->getInternetStatus() == FeatureStatus::INTERNET && millis() - prevCheckInternet > 5000)
+            else
+                prevCheckNTP = millis();
+
+            static uint32_t prevCheckInternet = 0;
+            if (WiFi.status() != WL_CONNECTED)
             {
-                prevCheckInternet = millis();
-                std::function<void(bool)> reconnectCallback = [ctx](bool c)
-                {
-                    if (c)
-                        ctx->setInternetStatus(FeatureStatus::WORKING);
-                    else
-                        ctx->setInternetStatus(FeatureStatus::INTERNET);
-                };
-                ctx->wifi.reconnect(false, &reconnectCallback);
+                Serial.println("WiFi disconnected!");
+                if (millis() - prevReconnect > 10000)
+                    esp_restart();
             }
+            else
+                prevReconnect = millis();
+            // else if (ctx->getInternetStatus() == FeatureStatus::INTERNET && millis() - prevCheckInternet > 5000)
+            // {
+            //     prevCheckInternet = millis();
+            //     std::function<void(bool)> reconnectCallback = [ctx](bool c)
+            //     {
+            //         if (c)
+            //             ctx->setInternetStatus(FeatureStatus::WORKING);
+            //         else
+            //             ctx->setInternetStatus(FeatureStatus::INTERNET);
+            //     };
+            //     ctx->wifi.reconnect(false, &reconnectCallback);
+            // }
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
@@ -205,6 +218,8 @@ public:
                 snprintf(buf, sizeof(buf), "%.1f mm/day", sensor.rainfall);
                 display.updateContainerValue(5, buf);
             }
+
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
     }
 };
