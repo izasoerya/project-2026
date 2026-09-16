@@ -2,8 +2,9 @@
 #define TASK_CONTEXT_H
 
 #include <Stream.h>
-#include "../utils/utils.h"
 #include <Wire.h>
+#include "../utils/utils.h"
+#include <projects/brin-bandung/slave-ws/utils/enum.h>
 
 struct contextWD
 {
@@ -75,6 +76,24 @@ struct contextTHWS
     const uint8_t pinSCL = 8;
 
     contextTHWS(TwoWire &w) : wire(w) {}
+};
+
+struct contextDaemon
+{
+    WiFiModule &wifi;
+    FeatureStatus feature[4];
+
+    contextDaemon(WiFiModule &w) : wifi(w) {}
+
+    void setNTPStatus(FeatureStatus v) { feature[0] = v; }
+    void setInternetStatus(FeatureStatus v) { feature[1] = v; }
+    void setMQTTStatus(FeatureStatus v) { feature[2] = v; }
+    void setWireGuardStatus(FeatureStatus v) { feature[3] = v; }
+
+    FeatureStatus getNTPStatus() { return feature[0]; }
+    FeatureStatus getInternetStatus() { return feature[1]; }
+    FeatureStatus getMQTTStatus() { return feature[2]; }
+    FeatureStatus getWireGuardStatus() { return feature[3]; }
 };
 
 #endif // TASK_CONTEXT_H

@@ -11,6 +11,7 @@
 TaskHandle_t handleReadWD;
 TaskHandle_t handleReadTHWS;
 TaskHandle_t handleMBSlave;
+TaskHandle_t handleDaemon;
 
 volatile uint32_t counterAnemo;
 volatile WindDirectionEnum windDirection;
@@ -28,10 +29,38 @@ public:
 
     static void taskDaemon(void *pvParam)
     {
+        contextDaemon *ctx = static_cast<contextDaemon *>(pvParam);
+        static uint32_t prevReconnect = millis();
+        static uint32_t prevCheckNTP = millis();
+
         while (1)
         {
             TimeStruct ts = NTPService::getTime();
             Serial.printf("Time: %d:%d:%d\n", ts.hour, ts.minute, ts.second);
+
+            if (ctx->getNTPStatus() == FeatureStatus::NTP && millis() - prevCheckNTP > 60000)
+            {
+                prevCheckNTP = millis();
+                ctx->setNTPStatus(FeatureStatus::WORKING);
+            }
+            else
+            {
+                prevCheckNTP = millis();
+                ctx->setNTPStatus(FeatureStatus::NTP);
+            }
+
+            static uint32_t prevCheckInternet = 0;
+            if (WiFi.status() != WL_CONNECTED)
+            {
+                Serial.println("WiFi disconnected!");
+                if (millis() - prevReconnect > 10000)
+                    ctx->setInternetStatus(FeatureStatus::INTERNET);
+            }
+            else if (WiFi.status() == WL_CONNECTED)
+            {
+                prevReconnect = millis();
+                ctx->setInternetStatus(FeatureStatus::WORKING);
+            }
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
