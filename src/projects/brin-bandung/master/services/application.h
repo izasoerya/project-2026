@@ -146,7 +146,6 @@ public:
             if (xQueueReceive(queueSensorRainfall, &rain, pdTICKS_TO_MS(0)) == pdPASS ||
                 xQueueReceive(queueSensorWS, &ws, pdTICKS_TO_MS(0)) == pdPASS)
             {
-
                 sensor.temperature = ws.temperature;
                 sensor.humidity = ws.humidity;
                 sensor.windSpeed = ws.windSpeed;
@@ -154,10 +153,7 @@ public:
                 sensor.rainfall = rain.rainfall;
 
                 if (singletonSensorFull.update(sensor))
-                {
-                    // TODO: HANDLE IF UPDATE SINGLETON FAIL
-                }
-                xQueueSend(queueSensorDashboard, &sensor, pdMS_TO_TICKS(10));
+                    xQueueSend(queueSensorDashboard, &sensor, pdMS_TO_TICKS(10));
             }
 
             static uint32_t lastSendTime = 0;
