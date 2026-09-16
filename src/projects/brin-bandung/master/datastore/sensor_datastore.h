@@ -30,7 +30,7 @@ struct SensorPublishableObject
     size_t toJson(char *out, size_t outSize) const
     {
         JsonDocument doc;
-        doc["device_id"] = DEVICE_ID;
+        doc["device_id"] = DEVICE_ID + 1;
         doc["temperature"] = temperature;
         doc["humidity"] = humidity;
         doc["wind_speed"] = windSpeed;
