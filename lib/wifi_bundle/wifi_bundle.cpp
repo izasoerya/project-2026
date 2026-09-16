@@ -100,7 +100,7 @@ bool WiFiBundle::reconnect(
                     "Reconnect", 2048,
                     new ReconnectParam{.bundle = this, .callback = onResult ? *onResult : std::function<void(bool)>()},
                     8, nullptr);
-        return true;
+        return true; // Not used, since the callback will be return value
     }
 }
 
