@@ -21,19 +21,22 @@ void setup()
     char hostname[64];
     snprintf(hostname, sizeof(hostname), "master-bandung-persemaian-%d.local", DEVICE_ID + 1);
     WiFiModule wifi(ssid, password, hostname, WIFI_POWER_19_5dBm);
+    static contextDaemon daemonCtx(wifi);
     if (wifi.begin([]() -> void
                    { Serial.print("."); }, []() -> void
                    { esp_restart(); }))
         Serial.printf("Connected with IP: %s", wifi.localIP());
+    daemonCtx.setInternetStatus(FeatureStatus::WORKING);
+    if (NTPService::init())
+        daemonCtx.setNTPStatus(FeatureStatus::NTP);
 
     static contextMBWS wsCtx(Serial0);
     static contextMBRainfall rainCtx(Serial1);
     static contextDisplay displayCtx(SPI);
-    static contextDaemon daemonCtx(wifi);
     static contextPublisher publisherCtx(wifi);
 
-    WireGuard wg;
-    WireGuardConfig wgConfig = wgConfigs[DEVICE_ID];
+    // WireGuard wg;
+    // WireGuardConfig wgConfig = wgConfigs[DEVICE_ID];
     ElegantOTA.setAutoReboot(true);
     ElegantOTA.onEnd([](bool success)
                      {if (success) esp_restart(); });
@@ -43,16 +46,15 @@ void setup()
     WebSerial.begin(&server);
     server.begin();
 
-    if (NTPService::init())
-        daemonCtx.setNTPStatus(FeatureStatus::NTP);
+    Application::init();
 
-    IPAddress wgLocalIP;
-    wgLocalIP.fromString(wgConfig.master.localIp);
-    Serial.printf("wg ip: %s\n", wgLocalIP.toString());
-    bool wgOk = wg.begin(wgLocalIP, wgConfig.master.privateKey,
-                         WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
-    if (!wgOk)
-        daemonCtx.setWireGuardStatus(FeatureStatus::WIREGUARD);
+    // IPAddress wgLocalIP;
+    // wgLocalIP.fromString(wgConfig.master.localIp);
+    // Serial.printf("wg ip: %s\n", wgLocalIP.toString());
+    // bool wgOk = wg.begin(wgLocalIP, wgConfig.master.privateKey,
+    //                      WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
+    // if (!wgOk)
+    //     daemonCtx.setWireGuardStatus(FeatureStatus::WIREGUARD);
 
     xTaskCreate(Application::taskReadRainfall, "sampling WD task", 4096, &rainCtx, 3, &handleReadRainfall);
     xTaskCreate(Application::taskReadWS, "modbus read rainfall slave task", 4096, &wsCtx, 2, &handleMBSlave);
