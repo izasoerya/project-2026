@@ -95,8 +95,8 @@ struct contextMBRainfall
 struct contextPublisher
 {
     WiFiModule &wifi;
-    const char *supabaseUrl = "https://pykernnkhvnssplhzcvn.supabase.co";
-    const char *supabasePublicKey = "sb_publishable_coDPUa845ZtfYmoBWlZlgw_eH5vsCY7";
+    const char *supabaseUrl = "https://gothabjdasaphwzrjnto.supabase.co";
+    const char *supabasePublicKey = "sb_publishable_Dx3vXSh8qdQhM1Zi_V1MTQ_ifqdbX1o";
     SupabaseTransport transport = SupabaseTransport(supabaseUrl, supabasePublicKey);
 
     contextPublisher(WiFiModule &w) : wifi(w) {}
