@@ -17,6 +17,7 @@ const char *password = "muhammadnabiyullah";
 void setup()
 {
     Serial.begin(115200);
+    Serial.printf("Last Reset Reason: %s\n", Parser::parseResetReasonESP(esp_reset_reason()));
 
     char hostname[64];
     snprintf(hostname, sizeof(hostname), "master-bandung-persemaian-%d.local", DEVICE_ID + 1);
