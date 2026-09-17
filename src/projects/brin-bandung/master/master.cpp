@@ -61,7 +61,7 @@ void setup()
     xTaskCreate(Application::taskReadWS, "modbus read rainfall slave task", 4096, &wsCtx, 2, &handleMBSlave);
     xTaskCreate(Application::taskDaemon, "daemon task", 4096, &daemonCtx, 1, &handleDaemon);
     xTaskCreate(Application::taskDisplayDashboard, "display dashboard task", 4096, &displayCtx, 2, &handleDisplay);
-    // xTaskCreate(Application::taskSendSupabase, "send supabase task", 8192, &publisherCtx, 1, &handlePublish);
+    xTaskCreate(Application::taskSendSupabase, "send supabase task", 8192, &publisherCtx, 1, &handlePublish);
 }
 
 void loop() { vTaskDelay(portMAX_DELAY); }

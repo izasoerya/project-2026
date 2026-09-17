@@ -189,20 +189,18 @@ public:
                     xQueueSend(queueSensorDashboard, &sensor, pdMS_TO_TICKS(10));
             }
 
-            // static uint32_t lastSendTime = 0;
-            // if (millis() - lastSendTime >= 60000)
-            // {
-            //     lastSendTime = millis();
+            static uint32_t lastSendTime = 0;
+            if (millis() - lastSendTime >= 60000)
+            {
+                lastSendTime = millis();
 
-            //     ctx->wifi.setTransport(&ctx->transport);
-            //     char buffer[256];
-            //     sensor.toJson(buffer, sizeof(buffer));
-            //     int16_t response = ctx->wifi.send("sensors", buffer);
-            //     if (response != 200 && response != 201)
-            //     {
-            //         // TODO: HANDLE SENSOR SEND FAIL
-            //     }
-            // }
+                ctx->wifi.setTransport(&ctx->transport);
+                char buffer[256];
+                sensor.toJson(buffer, sizeof(buffer));
+                int16_t response = ctx->wifi.send("%5BWS-DEV%5D%20sensors", buffer);
+
+                Serial.printf("[INFO] POST Supa: %d\n", response);
+            }
 
             vTaskDelay(1000 / portTICK_PERIOD_MS); // Loop every 1 second
         }
