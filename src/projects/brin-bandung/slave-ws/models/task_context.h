@@ -8,11 +8,11 @@
 
 struct contextWD
 {
-    Stream &serial;
+    HardwareSerial &serial;
     const uint8_t pinRX = 4;
     const uint8_t pinTX = 3;
 
-    contextWD(Stream &s) : serial(s) {}
+    contextWD(HardwareSerial &s) : serial(s) {}
 };
 
 struct contextMB
