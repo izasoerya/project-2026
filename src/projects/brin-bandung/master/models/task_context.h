@@ -31,8 +31,8 @@ struct contextMBWS
     HardwareSerial &serial;
     static const size_t MAX_REGISTER = 8;
     volatile uint16_t data[MAX_REGISTER];
-    const uint8_t pinRX = 3;
-    const uint8_t pinTX = 4;
+    const uint8_t pinRX = 2;
+    const uint8_t pinTX = 3;
     uint8_t errorTransactionModbusCounter = 0;
 
     contextMBWS(HardwareSerial &s) : serial(s) {}
@@ -64,8 +64,8 @@ struct contextMBRainfall
     HardwareSerial &serial;
     static const size_t MAX_REGISTER = 8;
     volatile uint16_t data[MAX_REGISTER];
-    const uint8_t pinRX = 5;
-    const uint8_t pinTX = 6;
+    const uint8_t pinRX = 8;
+    const uint8_t pinTX = 9;
     uint8_t errorTransactionModbusCounter = 0;
 
     contextMBRainfall(HardwareSerial &s) : serial(s) {}
@@ -105,9 +105,9 @@ struct contextPublisher
 struct contextDisplay
 {
     SPIClass &spi;
-    const uint8_t pinSCK = 8;
+    const uint8_t pinSCK = 1;
     const uint8_t pinMISO = 20;
-    const uint8_t pinMOSI = 9;
+    const uint8_t pinMOSI = 0;
     const uint8_t pinCS = 5;
 
     contextDisplay(SPIClass &s) : spi(s) {}
