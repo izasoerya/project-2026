@@ -21,7 +21,7 @@ void setup()
 
     char hostname[64];
     snprintf(hostname, sizeof(hostname), "master-bandung-persemaian-%d.local", DEVICE_ID + 1);
-    WiFiModule wifi(ssid, password, hostname, WIFI_POWER_19_5dBm);
+    WiFiModule wifi(ssid, password, hostname, WIFI_POWER_8_5dBm);
     static contextDaemon daemonCtx(wifi);
     if (wifi.begin([]() -> void
                    { Serial.print("."); }, []() -> void
@@ -60,8 +60,8 @@ void setup()
     xTaskCreate(Application::taskReadRainfall, "sampling WD task", 4096, &rainCtx, 3, &handleReadRainfall);
     xTaskCreate(Application::taskReadWS, "modbus read rainfall slave task", 4096, &wsCtx, 2, &handleMBSlave);
     xTaskCreate(Application::taskDaemon, "daemon task", 4096, &daemonCtx, 1, &handleDaemon);
-    xTaskCreate(Application::taskDisplayDashboard, "display dashboard task", 4096, &displayCtx, 2, &handleDisplay);
-    xTaskCreate(Application::taskSendSupabase, "send supabase task", 8192, &publisherCtx, 1, &handlePublish);
+    xTaskCreate(Application::taskDisplayDashboard, "display dashboard task", 8192, &displayCtx, 2, &handleDisplay);
+    // xTaskCreate(Application::taskSendSupabase, "send supabase task", 8192, &publisherCtx, 1, &handlePublish);
 }
 
 void loop() { vTaskDelay(portMAX_DELAY); }
