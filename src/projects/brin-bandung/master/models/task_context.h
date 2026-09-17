@@ -50,19 +50,15 @@ struct contextMBWS
         offset = response.get(offset, data[7]);
         errorTransactionModbusCounter = 0;
 
-        Serial.print("Raw Bytes: ");
+        Serial.print("[INFO] MBWS Incoming FC03: ");
         for (size_t i = 0; i < response.size(); i++)
-        {
             Serial.printf("%02X ", response[i]);
-        }
         Serial.println();
     }
 
     void onErrorHandler(Error error, uint32_t token)
     {
-        Serial.printf("[ERROR] modbus receive: %s\n", String(error));
-        if (errorTransactionModbusCounter > 10)
-            esp_restart();
+        Serial.printf("[ERROR] MBWS modbus receive: %s | %d\n", String(error), errorTransactionModbusCounter);
         errorTransactionModbusCounter++;
     }
 };
@@ -90,12 +86,16 @@ struct contextMBRainfall
         offset = response.get(offset, data[6]);
         offset = response.get(offset, data[7]);
         errorTransactionModbusCounter = 0;
+
+        Serial.print("[INFO] MBRain Incoming FC03: ");
+        for (size_t i = 0; i < response.size(); i++)
+            Serial.printf("%02X ", response[i]);
+        Serial.println();
     }
 
     void onErrorHandler(Error error, uint32_t token)
     {
-        if (errorTransactionModbusCounter > 10)
-            esp_restart();
+        Serial.printf("[ERROR] MBRain modbus receive: %s | %d\n", String(error), errorTransactionModbusCounter);
         errorTransactionModbusCounter++;
     }
 };
