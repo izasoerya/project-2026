@@ -76,6 +76,13 @@ public:
             //     ctx->wifi.reconnect(false, &reconnectCallback);
             // }
 
+            // DEBUG THE STACK WATERMARK
+            Serial.printf("Display: %u | ", uxTaskGetStackHighWaterMark(handleDisplay));
+            Serial.printf("Rainfall: %u | ", uxTaskGetStackHighWaterMark(handleReadRainfall));
+            Serial.printf("WS: %u | ", uxTaskGetStackHighWaterMark(handleMBSlave));
+            Serial.printf("Daemon: %u | ", uxTaskGetStackHighWaterMark(handleDaemon));
+            Serial.printf("Publish: %u words\n", uxTaskGetStackHighWaterMark(handlePublish));
+
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
     }
