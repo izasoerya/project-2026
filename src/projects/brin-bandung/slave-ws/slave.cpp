@@ -19,7 +19,7 @@
  * [0] = CISANGKUY
  * [1] = CIMINYAK
  */
-#define DEVICE_ID 1
+#define DEVICE_ID 0
 
 const char *ssid = "NodeSensorWiFi1";
 const char *password = "muhammadnabiyullah";
@@ -31,34 +31,35 @@ void setup()
     char hostname[64];
     snprintf(hostname, sizeof(hostname), "slave-arr-bandung-persemaian-%d.local", DEVICE_ID + 1);
     WiFiModule wifi(ssid, password, hostname, WIFI_POWER_19_5dBm);
-    if (wifi.begin([]()
-                   { Serial.println("."); }, []()
-                   { esp_restart(); }))
-        Serial.println(wifi.localIP());
+    static contextDaemon daemonCtx(wifi);
+    daemonCtx.setInternetStatus(FeatureStatus::INTERNET); // Default to not working
+    daemonCtx.setNTPStatus(FeatureStatus::NTP);           // Default to not working
 
-    WireGuard wg;
-    AsyncWebServer server(80);
-    WireGuardConfig wgConfig = wgConfigs[DEVICE_ID];
-    Application app;
-    ElegantOTA.setAutoReboot(true);
-    ElegantOTA.begin(&server);
-    ElegantOTA.onEnd([](bool success)
-                     { if(success) esp_restart(); });
-    WebSerial.begin(&server);
-    server.begin();
+    if (daemonCtx.getInternetStatus() == FeatureStatus::WORKING)
+    {
+        if (NTPService::init())
+            daemonCtx.setNTPStatus(FeatureStatus::WORKING);
 
-    if (NTPService::init())
-    {
-        // TODO: HANDLE IF NTP FAIL
-    }
-    IPAddress wgLocalIP;
-    wgLocalIP.fromString(wgConfig.slave.localIp);
-    Serial.printf("wg ip: %s\n", wgLocalIP.toString());
-    bool wgOk = wg.begin(wgLocalIP, wgConfig.slave.privateKey,
-                         WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
-    if (!wgOk)
-    {
-        // TODO: HANDLE IF WIREGUARD FAIL
+        AsyncWebServer server(80);
+        Application app;
+        ElegantOTA.setAutoReboot(true);
+        ElegantOTA.begin(&server);
+        ElegantOTA.onEnd([](bool success)
+                         { if(success) esp_restart(); });
+        WebSerial.begin(&server);
+        server.begin();
+
+        WireGuard wg;
+        WireGuardConfig wgConfig = wgConfigs[DEVICE_ID];
+        IPAddress wgLocalIP;
+        wgLocalIP.fromString(wgConfig.slave.localIp);
+        Serial.printf("wg ip: %s\n", wgLocalIP.toString());
+        bool wgOk = wg.begin(wgLocalIP, wgConfig.slave.privateKey,
+                             WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
+        if (!wgOk)
+        {
+            // TODO: HANDLE IF WIREGUARD FAIL
+        }
     }
 
     static contextTHWS sensorCtx(Wire);
@@ -67,6 +68,7 @@ void setup()
     xTaskCreate(Application::taskReadTHWS, "sampling THWS task", 8192, &sensorCtx, 2, &handleReadTHWS);
     xTaskCreate(Application::taskReadWD, "sampling WD task", 8192, &wdCtx, 3, &handleReadWD);
     xTaskCreate(Application::taskMBSlave, "modbus slave task", 8192, &mbCtx, 1, &handleMBSlave);
+    xTaskCreate(Application::taskDaemon, "daemon task", 4096, &daemonCtx, 1, &handleDaemon);
 }
 
 void loop() { vTaskDelay(portMAX_DELAY); }
