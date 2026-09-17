@@ -65,8 +65,8 @@ void setup()
     Application::init();
 
     static contextTHWS sensorCtx(Wire);
-    static contextMB mbCtx(Serial0);
-    static contextWD wdCtx(Serial1);
+    static contextMB mbCtx(Serial1);
+    static contextWD wdCtx(Serial0);
     xTaskCreate(Application::taskReadTHWS, "sampling THWS task", 8192, &sensorCtx, 2, &handleReadTHWS);
     xTaskCreate(Application::taskReadWD, "sampling WD task", 8192, &wdCtx, 3, &handleReadWD);
     xTaskCreate(Application::taskMBSlave, "modbus slave task", 8192, &mbCtx, 1, &handleMBSlave);
