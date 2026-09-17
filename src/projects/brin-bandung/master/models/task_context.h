@@ -31,8 +31,8 @@ struct contextMBWS
     HardwareSerial &serial;
     static const size_t MAX_REGISTER = 8;
     volatile uint16_t data[MAX_REGISTER];
-    const uint8_t pinRX = 2;
-    const uint8_t pinTX = 3;
+    const uint8_t pinRX = 21; // 21
+    const uint8_t pinTX = 20; // 20
     uint8_t errorTransactionModbusCounter = 0;
 
     contextMBWS(HardwareSerial &s) : serial(s) {}
@@ -49,10 +49,18 @@ struct contextMBWS
         offset = response.get(offset, data[6]);
         offset = response.get(offset, data[7]);
         errorTransactionModbusCounter = 0;
+
+        Serial.print("Raw Bytes: ");
+        for (size_t i = 0; i < response.size(); i++)
+        {
+            Serial.printf("%02X ", response[i]);
+        }
+        Serial.println();
     }
 
     void onErrorHandler(Error error, uint32_t token)
     {
+        Serial.printf("[ERROR] modbus receive: %s\n", String(error));
         if (errorTransactionModbusCounter > 10)
             esp_restart();
         errorTransactionModbusCounter++;
@@ -106,7 +114,7 @@ struct contextDisplay
 {
     SPIClass &spi;
     const uint8_t pinSCK = 1;
-    const uint8_t pinMISO = 20;
+    const uint8_t pinMISO = 10;
     const uint8_t pinMOSI = 0;
     const uint8_t pinCS = 5;
 

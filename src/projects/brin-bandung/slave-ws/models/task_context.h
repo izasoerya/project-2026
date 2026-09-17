@@ -19,8 +19,8 @@ struct contextMB
 {
     HardwareSerial &serial;
     volatile uint16_t data[8];
-    const uint8_t pinRX = 5;
-    const uint8_t pinTX = 6;
+    const uint8_t pinRX = 20; // 20
+    const uint8_t pinTX = 21; // 21
 
     contextMB(HardwareSerial &s) : serial(s) {}
 
@@ -30,10 +30,15 @@ struct contextMB
         uint16_t words;
         ModbusMessage response;
 
+        Serial.printf("[INFO] FC03 Req -> Server ID: %d, FC: %02X, Total Byte: %d\n",
+                      request.getServerID(),
+                      request.getFunctionCode(),
+                      request.size());
+
         request.get(2, address); // Since slave id starts at bytes 2
         request.get(4, words);   // Since length address starts at bytes 4
 
-        if (address && words && (address + words) <= 10)
+        if (words > 0 && address + words <= 8)
         {
             response.add(request.getServerID(), request.getFunctionCode(), (uint8_t)(words * 2));
             for (uint16_t i = address; i < address + words; ++i)
@@ -54,7 +59,7 @@ struct contextMB
         request.get(2, addr);  // read address from request
         request.get(4, value); // read value from request
 
-        if (addr >= 16)
+        if (addr >= 8)
         {
             response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
             return response;
@@ -82,6 +87,7 @@ struct contextDaemon
 {
     WiFiModule &wifi;
     FeatureStatus feature[4];
+    Feature enabledFeature[4];
 
     contextDaemon(WiFiModule &w) : wifi(w) {}
 
