@@ -31,8 +31,8 @@ void setup()
     if (NTPService::init())
         daemonCtx.setNTPStatus(FeatureStatus::NTP);
 
-    static contextMBWS wsCtx(Serial0);
-    static contextMBRainfall rainCtx(Serial1);
+    static contextMBWS wsCtx(Serial1);
+    static contextMBRainfall rainCtx(Serial0);
     static contextDisplay displayCtx(SPI);
     static contextPublisher publisherCtx(wifi);
 
