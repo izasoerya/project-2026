@@ -2,6 +2,7 @@
 #define APPLICATION_H
 
 #include <ModbusClientRTU.h>
+#include <RTUutils.h>
 #include <TFT_eSPI.h>
 #include <functional>
 #include <display/display_tft_spi_lcd/display_tft.h>
@@ -94,13 +95,14 @@ public:
         SensorRainfallObject sensor;
         uint32_t stampMBCounter = 0;
 
+        RTUutils::prepareHardwareSerial(ctx->serial);
         ctx->serial.begin(9600, SERIAL_8N1, ctx->pinRX, ctx->pinTX);
-        mb.onDataHandler([&ctx](ModbusMessage response, uint32_t token)
+        mb.onDataHandler([ctx](ModbusMessage response, uint32_t token)
                          { ctx->onDataIncoming(response, token); });
-        mb.onErrorHandler([&ctx](Error error, uint32_t token)
+        mb.onErrorHandler([ctx](Error error, uint32_t token)
                           { ctx->onErrorHandler(error, token); });
         mb.setTimeout(10000);
-        mb.begin(Serial1);
+        mb.begin(ctx->serial);
         while (1)
         {
             Error err = mb.addRequest((uint32_t)stampMBCounter, // Token
@@ -121,22 +123,29 @@ public:
         SensorWSObject sensor;
         uint32_t stampMBCounter = 0;
 
+        RTUutils::prepareHardwareSerial(ctx->serial);
         ctx->serial.begin(9600, SERIAL_8N1, ctx->pinRX, ctx->pinTX);
-        mb.onDataHandler([&ctx](ModbusMessage response, uint32_t token)
+        mb.onDataHandler([ctx](ModbusMessage response, uint32_t token)
                          { ctx->onDataIncoming(response, token); });
-        mb.onErrorHandler([&ctx](Error error, uint32_t token)
+        mb.onErrorHandler([ctx](Error error, uint32_t token)
                           { ctx->onErrorHandler(error, token); });
         mb.setTimeout(10000);
-        mb.begin(Serial1);
+        mb.begin(ctx->serial);
         while (1)
         {
             Error err = mb.addRequest((uint32_t)stampMBCounter, // Token
-                                      1, READ_HOLD_REGISTER, 0, 1);
+                                      1, READ_HOLD_REGISTER, 0, 8);
             if (err != SUCCESS)
             {
-                // TODO: HANDLE IF READ MODBUS ERROR
+                Serial.printf("[ERROR] WS Modbus request: %s\n", String(err));
             }
-            xQueueSend(queueSensorWS, &sensor, pdTICKS_TO_MS(10));
+            else
+            {
+                Serial.printf("[INFO] WS Modbus FC03 request queued, token: %lu\n", stampMBCounter);
+                stampMBCounter++;
+            }
+
+            // xQueueSend(queueSensorWS, &sensor, pdTICKS_TO_MS(10));
             vTaskDelay(10000 / portTICK_PERIOD_MS);
         }
     }

@@ -2,6 +2,7 @@
 #define APPLICATION_H
 
 #include <ModbusServerRTU.h>
+#include <RTUutils.h>
 #include <ClosedCube_SHT31D.h>
 #include "../../include/sensor/filters/moving_average.h"
 #include "../models/task_context.h"
@@ -35,31 +36,24 @@ public:
 
         while (1)
         {
-            TimeStruct ts = NTPService::getTime();
-            Serial.printf("Time: %d:%d:%d\n", ts.hour, ts.minute, ts.second);
+            for (int i = 0; i < sizeof(ctx->enabledFeature) / sizeof(Feature); i++)
+            {
+                if (ctx->enabledFeature[i] == Feature::INTERNET_FEAUTRE)
+                {
+                    if (WiFi.status() != WL_CONNECTED)
+                        ctx->setInternetStatus(FeatureStatus::INTERNET);
+                    else if (WiFi.status() == WL_CONNECTED)
+                        ctx->setInternetStatus(FeatureStatus::WORKING);
+                }
 
-            if (ctx->getNTPStatus() == FeatureStatus::NTP && millis() - prevCheckNTP > 60000)
-            {
-                prevCheckNTP = millis();
-                ctx->setNTPStatus(FeatureStatus::WORKING);
-            }
-            else
-            {
-                prevCheckNTP = millis();
-                ctx->setNTPStatus(FeatureStatus::NTP);
-            }
-
-            static uint32_t prevCheckInternet = 0;
-            if (WiFi.status() != WL_CONNECTED)
-            {
-                Serial.println("WiFi disconnected!");
-                if (millis() - prevReconnect > 10000)
-                    ctx->setInternetStatus(FeatureStatus::INTERNET);
-            }
-            else if (WiFi.status() == WL_CONNECTED)
-            {
-                prevReconnect = millis();
-                ctx->setInternetStatus(FeatureStatus::WORKING);
+                if (ctx->enabledFeature[i] == Feature::NTP_FEATURE)
+                {
+                    TimeStruct ts = NTPService::getTime();
+                    if (ctx->getNTPStatus() == FeatureStatus::NTP)
+                        ctx->setNTPStatus(FeatureStatus::WORKING);
+                    else
+                        ctx->setNTPStatus(FeatureStatus::NTP);
+                }
             }
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -126,7 +120,7 @@ public:
             if (singletonSensor.update(snapshot))
             {
                 xQueueSend(queueSensorDatastore, &singletonSensor, pdMS_TO_TICKS(10));
-                Serial.println("Success to send sensor datastore to queue");
+                Serial.printf("[INFO] Push sensor to queue: %s", snapshot.toString());
             }
             else
             {
@@ -144,7 +138,8 @@ public:
         ModbusServerRTU mbServer(2000); // Timeout 2000ms
         SensorObject payload;
 
-        Serial0.begin(9600, SERIAL_8N1, mbCtx->pinRX, mbCtx->pinTX);
+        RTUutils::prepareHardwareSerial(mbCtx->serial);
+        mbCtx->serial.begin(9600, SERIAL_8N1, mbCtx->pinRX, mbCtx->pinTX);
         mbServer.registerWorker(0x01, READ_HOLD_REGISTER, [mbCtx](ModbusMessage request)
                                 { return mbCtx->FC03(request); });
         mbServer.registerWorker(0x01, WRITE_HOLD_REGISTER, [mbCtx](ModbusMessage request)
@@ -154,7 +149,8 @@ public:
         {
             if (xQueueReceive(queueSensorDatastore, &payload, 0) == pdPASS)
             {
-                mbCtx->data[0] = uint16_t(payload.temperature * 10);
+                Serial.printf("[INFO] Receive sensor queue: %s", payload.toString());
+                mbCtx->data[0] = uint16_t(10);
                 mbCtx->data[1] = uint16_t(payload.humidity * 10);
                 mbCtx->data[2] = uint16_t(payload.windSpeed * 10);
                 mbCtx->data[3] = uint16_t(payload.windDirection);
