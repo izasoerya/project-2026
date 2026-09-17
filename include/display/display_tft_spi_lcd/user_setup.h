@@ -51,12 +51,12 @@
 // #define HX8357D_DRIVER
 // #define ILI9481_DRIVER
 // #define ILI9486_DRIVER
-// #define ILI9488_DRIVER     // WARNING: Do not connect ILI9488 display SDO to MISO if other devices share the SPI bus (TFT SDO does NOT tristate when CS is high)
+#define ILI9488_DRIVER // WARNING: Do not connect ILI9488 display SDO to MISO if other devices share the SPI bus (TFT SDO does NOT tristate when CS is high)
 // #define ST7789_DRIVER // Full configuration option, define additional parameters below for this display
 // #define ST7789_2_DRIVER // Minimal configuration option, define additional parameters below for this display
 // #define R61581_DRIVER
 // #define RM68140_DRIVER
-#define ST7796_DRIVER
+// #define ST7796_DRIVER
 // #define SSD1351_DRIVER
 // #define SSD1963_480_DRIVER
 // #define SSD1963_800_DRIVER
@@ -203,8 +203,8 @@
 // The hardware SPI can be mapped to any pins
 
 #define TFT_MISO 20
-#define TFT_MOSI 9
-#define TFT_SCLK 8
+#define TFT_MOSI 0
+#define TFT_SCLK 1
 #define TFT_CS 5  // Chip select control pin
 #define TFT_DC 7  // Data Command control pin
 #define TFT_RST 6 // Reset pin (could connect to RST pin)
@@ -369,7 +369,7 @@
 // The ESP32 has 2 free SPI ports i.e. VSPI and HSPI, the VSPI is the default.
 // If the VSPI port is in use and pins are not accessible (e.g. TTGO T-Beam)
 // then uncomment the following line:
-#define USE_HSPI_PORT
+// #define USE_HSPI_PORT
 
 // Comment out the following #define if "SPI Transactions" do not need to be
 // supported. When commented out the code size will be smaller and sketches will
