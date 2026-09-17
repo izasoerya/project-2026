@@ -10,6 +10,15 @@ struct SensorObject
     float humidity;
     float windSpeed;
     WindDirectionEnum windDirection;
+
+    const char *toString()
+    {
+        static char buffer[64];
+        snprintf(buffer, sizeof(buffer),
+                 "T: %.1f | H: %.1f | WS: %.1f | WD: %s\n",
+                 temperature, humidity, windSpeed, Parser::parseWindDirection(windDirection));
+        return buffer;
+    }
 };
 
 class SensorDatastore
