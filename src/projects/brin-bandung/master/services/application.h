@@ -110,6 +110,16 @@ public:
             if (err != SUCCESS)
             {
                 // TODO: HANDLE IF READ MODBUS ERROR
+                Serial.printf("[ERROR] Rain Modbus request: %s\n", String(err));
+            }
+            else
+            {
+                Serial.printf("[INFO] WS Modbus FC03 request queued, token: %lu\n", stampMBCounter);
+                stampMBCounter++;
+
+                sensor.rainfall = ctx->data[4] / 10.0F;
+
+                xQueueSend(queueSensorRainfall, &sensor, pdTICKS_TO_MS(10));
             }
             xQueueSend(queueSensorRainfall, &sensor, pdTICKS_TO_MS(10));
             vTaskDelay(10000 / portTICK_PERIOD_MS);
@@ -120,7 +130,8 @@ public:
     {
         contextMBWS *ctx = static_cast<contextMBWS *>(pvParam);
         ModbusClientRTU mb;
-        SensorWSObject sensor;
+        SensorWSObject sensorWS;
+        SensorRainfallObject sensorRain;
         uint32_t stampMBCounter = 0;
 
         RTUutils::prepareHardwareSerial(ctx->serial);
@@ -137,15 +148,21 @@ public:
                                       1, READ_HOLD_REGISTER, 0, 8);
             if (err != SUCCESS)
             {
+                // TODO: HANDLE IF READ MODBUS ERROR
                 Serial.printf("[ERROR] WS Modbus request: %s\n", String(err));
             }
             else
             {
                 Serial.printf("[INFO] WS Modbus FC03 request queued, token: %lu\n", stampMBCounter);
                 stampMBCounter++;
-            }
 
-            // xQueueSend(queueSensorWS, &sensor, pdTICKS_TO_MS(10));
+                sensorWS.temperature = ctx->data[0] / 10.0F;
+                sensorWS.humidity = ctx->data[1] / 10.0F;
+                sensorWS.windSpeed = ctx->data[2] / 10.0F;
+                sensorWS.windDirection = static_cast<WindDirectionEnum>(ctx->data[3]);
+
+                xQueueSend(queueSensorWS, &sensorWS, pdTICKS_TO_MS(10));
+            }
             vTaskDelay(10000 / portTICK_PERIOD_MS);
         }
     }
@@ -172,20 +189,20 @@ public:
                     xQueueSend(queueSensorDashboard, &sensor, pdMS_TO_TICKS(10));
             }
 
-            static uint32_t lastSendTime = 0;
-            if (millis() - lastSendTime >= 60000)
-            {
-                lastSendTime = millis();
+            // static uint32_t lastSendTime = 0;
+            // if (millis() - lastSendTime >= 60000)
+            // {
+            //     lastSendTime = millis();
 
-                ctx->wifi.setTransport(&ctx->transport);
-                char buffer[256];
-                sensor.toJson(buffer, sizeof(buffer));
-                int16_t response = ctx->wifi.send("sensors", buffer);
-                if (response != 200 && response != 201)
-                {
-                    // TODO: HANDLE SENSOR SEND FAIL
-                }
-            }
+            //     ctx->wifi.setTransport(&ctx->transport);
+            //     char buffer[256];
+            //     sensor.toJson(buffer, sizeof(buffer));
+            //     int16_t response = ctx->wifi.send("sensors", buffer);
+            //     if (response != 200 && response != 201)
+            //     {
+            //         // TODO: HANDLE SENSOR SEND FAIL
+            //     }
+            // }
 
             vTaskDelay(1000 / portTICK_PERIOD_MS); // Loop every 1 second
         }
