@@ -63,7 +63,7 @@ public:
     static void taskReadWD(void *pvParam)
     {
         contextWD *wdCtx = static_cast<contextWD *>(pvParam);
-        Serial1.begin(9600, SERIAL_8N1, wdCtx->pinRX, wdCtx->pinTX);
+        wdCtx->serial.begin(9600, SERIAL_8N1, wdCtx->pinRX, wdCtx->pinTX);
 
         while (1)
         {
