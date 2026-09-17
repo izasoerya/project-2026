@@ -215,6 +215,9 @@ public:
                 display.updateContainerValue(5, buf);
             }
 
+            TimeStruct ts = NTPService::getTime();
+            display.setClock(ts.hour, ts.minute, ts.second);
+            display.refresh();
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
     }
