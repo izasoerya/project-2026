@@ -62,6 +62,8 @@ void setup()
         }
     }
 
+    Application::init();
+
     static contextTHWS sensorCtx(Wire);
     static contextMB mbCtx(Serial0);
     static contextWD wdCtx(Serial1);
