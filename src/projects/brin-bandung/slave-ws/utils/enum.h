@@ -11,4 +11,10 @@ enum FeatureStatus
     WORKING
 };
 
+enum Feature
+{
+    INTERNET_FEAUTRE = 0,
+    NTP_FEATURE
+};
+
 #endif // ENUM_H
