@@ -47,9 +47,7 @@ struct contextMBWS
         offset = response.get(offset, modbusData[2]);
         offset = response.get(offset, modbusData[3]);
         offset = response.get(offset, modbusData[4]);
-        offset = response.get(offset, modbusData[5]);
-        offset = response.get(offset, modbusData[6]);
-        offset = response.get(offset, modbusData[7]);
+        //  ADDRES 5 - 8 ARE FOR CONFIGURATION
         errorTransactionModbusCounter = 0;
 
         Serial.print("[INFO] MBWS Incoming FC03: ");
