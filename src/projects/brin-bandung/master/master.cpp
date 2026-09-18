@@ -9,6 +9,7 @@
 #include "../config.h" // .env
 #include "../utils/ntp_service.h"
 #include "services/application.h"
+#include "services/command_parser.h"
 #include "transmitter/configs/wifi_module.h"
 
 const char *ssid = "NodeSensorWiFi1";
@@ -19,7 +20,7 @@ void setup()
     Serial.begin(115200);
     Serial.printf("Last Reset Reason: %s\n", Parser::parseResetReasonESP(esp_reset_reason()));
 
-    char hostname[64];
+    static char hostname[64];
     snprintf(hostname, sizeof(hostname), "master-bandung-persemaian-%d.local", DEVICE_ID + 1);
     WiFiModule wifi(ssid, password, hostname, WIFI_POWER_8_5dBm);
     static contextDaemon daemonCtx(wifi);
@@ -45,6 +46,22 @@ void setup()
     AsyncWebServer server(80);
     ElegantOTA.begin(&server);
     WebSerial.begin(&server);
+    WebSerial.onMessage(
+        [](uint8_t *data, size_t len)
+        {
+            EnabledOTA res = CommandParser::otaCommand(data, len);
+            if (static_cast<uint8_t>(res) != 0)
+            {
+                if (res == EnabledOTA::SLAVE_WS_ON)
+                    daemonCtx.modbusData[6] = 1;
+                else if (res == EnabledOTA::SLAVE_WS_OFF)
+                    daemonCtx.modbusData[6] = 0;
+                else if (res == EnabledOTA::SLAVE_ARR_ON)
+                    daemonCtx.modbusData[7] = 1;
+                else if (res == EnabledOTA::SLAVE_ARR_OFF)
+                    daemonCtx.modbusData[7] = 0;
+            }
+        });
     server.begin();
 
     Application::init();
