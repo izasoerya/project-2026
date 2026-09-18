@@ -37,27 +37,40 @@ public:
         contextDaemon *ctx = static_cast<contextDaemon *>(pvParam);
         vTaskSuspend(NULL);
 
-        WireGuard wg;
-        WireGuardConfig wgConfig = wgConfigs[0]; // TODO: CHANGE BASED ON SETUP
-        IPAddress wgLocalIP;
-        wgLocalIP.fromString(wgConfig.master.localIp);
-        Serial.printf("wg ip: %s\n", wgLocalIP.toString());
-        bool wgOk = wg.begin(wgLocalIP, wgConfig.master.privateKey,
-                             WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
-        if (!wgOk)
-            ctx->setWireGuardStatus(FeatureStatus::WIREGUARD);
+        static bool isWiFiConnected = false;
+        Serial.println("Connecting to WiFi");
+        ctx->wifi.beginNB([](bool t)
+                          { isWiFiConnected = t; });
+
+        while (!isWiFiConnected)
+            vTaskDelay(500 / portTICK_PERIOD_MS);
+
+        Serial.printf("Connected with IP: %s\n", ctx->wifi.localIP());
+        if (NTPService::init())
+            ctx->setNTPStatus(FeatureStatus::WORKING);
+
+        // WireGuard wg;
+        // WireGuardConfig wgConfig = wgConfigs[0]; // TODO: CHANGE BASED ON SETUP
+        // IPAddress wgLocalIP;
+        // wgLocalIP.fromString(wgConfig.master.localIp);
+        // Serial.printf("wg ip: %s\n", wgLocalIP.toString());
+        // bool wgOk = wg.begin(wgLocalIP, wgConfig.master.privateKey,
+        //                      WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
+        // if (!wgOk)
+        //     ctx->setWireGuardStatus(FeatureStatus::WIREGUARD);
 
         AsyncWebServer server(80);
         ElegantOTA.begin(&server);
         ElegantOTA.setAutoReboot(true);
         WebSerial.begin(&server);
+        server.begin();
 
         while (1)
         {
             ElegantOTA.loop();
             WebSerial.loop();
 
-            vTaskDelay(10 / portTICK_PERIOD_MS);
+            vTaskDelay(20 / portTICK_PERIOD_MS);
         }
     }
 
@@ -70,48 +83,42 @@ public:
         while (1)
         {
             if (ctx->modbusData[5] == 1)
-                ctx->enabledFeature[0] == Feature::INTERNET_FEAUTRE;
+                ctx->enabledFeature[0] = Feature::INTERNET_FEAUTRE;
             if (ctx->modbusData[6] == 1)
-                ctx->enabledFeature[1] == Feature::OTA_FEATURE;
+                ctx->enabledFeature[1] = Feature::OTA_FEATURE;
 
-            for (int i = 0; i < sizeof(ctx->enabledFeature) / sizeof(Feature); i++)
-            {
-                if (ctx->enabledFeature[i] == Feature::INTERNET_FEAUTRE)
-                    if (WiFi.status() != WL_CONNECTED)
+            if (ctx->enabledFeature[0] == Feature::INTERNET_FEAUTRE)
+                if (WiFi.status() != WL_CONNECTED)
+                {
+                    static uint32_t prevConnect = 0;
+                    if (millis() - prevConnect > 15000) // Timeout on 15 second
                     {
-                        static uint32_t prevConnect = 0;
-                        if (millis() - prevConnect > 15000) // Timeout on 15 second
-                        {
-                            prevConnect = millis();
-                            ctx->wifi.begin([]() {}, []() {});
-                        }
-                        ctx->setInternetStatus(FeatureStatus::INTERNET);
+                        prevConnect = millis();
+                        ctx->wifi.begin([]() {}, []() {});
                     }
-                    else if (WiFi.status() == WL_CONNECTED)
-                        ctx->setInternetStatus(FeatureStatus::WORKING);
+                    ctx->setInternetStatus(FeatureStatus::INTERNET);
+                }
+                else if (WiFi.status() == WL_CONNECTED)
+                    ctx->setInternetStatus(FeatureStatus::WORKING);
 
-                if (ctx->enabledFeature[i] == Feature::OTA_FEATURE)
-                    if (ctx->getNTPStatus() == FeatureStatus::NTP)
-                    {
-                        static uint32_t prevNTP = 0;
-                        if (millis() - prevNTP > 15000) // Timeout on 15 second
-                        {
-                            prevNTP = millis();
-                            if (NTPService::init())
-                                ctx->setNTPStatus(FeatureStatus::WORKING);
-                        }
-                    }
-                    else if (handleOta != nullptr)
-                        vTaskResume(handleOta);
-                    else if (handleOta != nullptr)
-                        vTaskSuspend(handleOta);
-            }
+            if (ctx->enabledFeature[1] == Feature::OTA_FEATURE)
+                vTaskResume(handleOta);
+
+            Serial.printf("WD: %u | THWS: %u | MB: %u | Daemon: %u | OTA: %u\n",
+                          uxTaskGetStackHighWaterMark(handleReadWD),
+                          uxTaskGetStackHighWaterMark(handleReadTHWS),
+                          uxTaskGetStackHighWaterMark(handleMBSlave),
+                          uxTaskGetStackHighWaterMark(handleDaemon),
+                          uxTaskGetStackHighWaterMark(handleOta));
+
+            ctx->modbusData[6] = true;
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
     }
 
-    static void taskReadWD(void *pvParam)
+    static void
+    taskReadWD(void *pvParam)
     {
         contextWD *wdCtx = static_cast<contextWD *>(pvParam);
         wdCtx->serial.begin(9600, SERIAL_8N1, wdCtx->pinRX, wdCtx->pinTX);
