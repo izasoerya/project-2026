@@ -13,8 +13,9 @@ enum FeatureStatus
 
 enum Feature
 {
+    FEATURE_DISABLED = -1,
     INTERNET_FEAUTRE = 0,
-    NTP_FEATURE
+    OTA_FEATURE = 1
 };
 
 #endif // ENUM_H
