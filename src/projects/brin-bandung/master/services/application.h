@@ -104,7 +104,7 @@ public:
                 Serial.printf("[INFO] WS Modbus FC03 request queued, token: %lu\n", stampMBCounter);
                 stampMBCounter++;
 
-                sensor.rainfall = ctx->data[4] / 10.0F;
+                sensor.rainfall = ctx->modbusData[4] / 10.0F;
 
                 xQueueSend(queueSensorRainfall, &sensor, pdTICKS_TO_MS(10));
             }
@@ -143,10 +143,10 @@ public:
                 Serial.printf("[INFO] WS Modbus FC03 request queued, token: %lu\n", stampMBCounter);
                 stampMBCounter++;
 
-                sensorWS.temperature = ctx->data[0] / 10.0F;
-                sensorWS.humidity = ctx->data[1] / 10.0F;
-                sensorWS.windSpeed = ctx->data[2] / 10.0F;
-                sensorWS.windDirection = static_cast<WindDirectionEnum>(ctx->data[3]);
+                sensorWS.temperature = ctx->modbusData[0] / 10.0F;
+                sensorWS.humidity = ctx->modbusData[1] / 10.0F;
+                sensorWS.windSpeed = ctx->modbusData[2] / 10.0F;
+                sensorWS.windDirection = static_cast<WindDirectionEnum>(ctx->modbusData[3]);
 
                 xQueueSend(queueSensorWS, &sensorWS, pdTICKS_TO_MS(10));
             }
