@@ -65,10 +65,25 @@ public:
         WebSerial.begin(&server);
         server.begin();
 
+        static uint16_t counter = 0;
         while (1)
         {
             ElegantOTA.loop();
             WebSerial.loop();
+
+            if (WiFi.status() != WL_CONNECTED)
+            {
+                counter++;
+                if (counter > 1000)
+                {
+                    counter = 0;
+                    Serial.printf("Reconnecting...\n");
+                    ctx->wifi.disconnect();
+                    ctx->wifi.beginNB();
+                }
+            }
+            else
+                counter = 0;
 
             vTaskDelay(20 / portTICK_PERIOD_MS);
         }
@@ -86,6 +101,8 @@ public:
                 ctx->enabledFeature[0] = Feature::INTERNET_FEAUTRE;
             if (ctx->modbusData[6] == 1)
                 ctx->enabledFeature[1] = Feature::OTA_FEATURE;
+            else if (ctx->modbusData[6] == 0)
+                ctx->enabledFeature[1] = Feature::FEATURE_DISABLED;
 
             if (ctx->enabledFeature[0] == Feature::INTERNET_FEAUTRE)
                 if (WiFi.status() != WL_CONNECTED)
@@ -103,6 +120,11 @@ public:
 
             if (ctx->enabledFeature[1] == Feature::OTA_FEATURE)
                 vTaskResume(handleOta);
+            else if (ctx->enabledFeature[1] == Feature::FEATURE_DISABLED)
+            {
+                vTaskSuspend(handleOta);
+                ctx->wifi.disconnect();
+            }
 
             Serial.printf("WD: %u | THWS: %u | MB: %u | Daemon: %u | OTA: %u\n",
                           uxTaskGetStackHighWaterMark(handleReadWD),
