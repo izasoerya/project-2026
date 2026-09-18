@@ -11,4 +11,13 @@ enum FeatureStatus
     WORKING
 };
 
+enum EnabledOTA
+{
+    INVALID = 0,
+    SLAVE_ARR_ON,
+    SLAVE_ARR_OFF,
+    SLAVE_WS_ON,
+    SLAVE_WS_OFF
+};
+
 #endif // ENUM_H
