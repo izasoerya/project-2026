@@ -6,6 +6,8 @@
 #include "../utils/utils.h"
 #include <projects/brin-bandung/slave-ws/utils/enum.h>
 
+static volatile uint16_t sharedModbusData[8];
+
 struct contextWD
 {
     HardwareSerial &serial;
@@ -18,7 +20,7 @@ struct contextWD
 struct contextMB
 {
     HardwareSerial &serial;
-    volatile uint16_t data[8];
+    volatile uint16_t *modbusData = sharedModbusData;
     const uint8_t pinRX = 20; // 20
     const uint8_t pinTX = 21; // 21
 
@@ -42,7 +44,7 @@ struct contextMB
         {
             response.add(request.getServerID(), request.getFunctionCode(), (uint8_t)(words * 2));
             for (uint16_t i = address; i < address + words; ++i)
-                response.add(data[i]);
+                response.add(modbusData[i]);
         }
         else
             response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
@@ -64,7 +66,7 @@ struct contextMB
             response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
             return response;
         }
-        data[addr] = value;
+        modbusData[addr] = value;
 
         response.add(request.getServerID(), request.getFunctionCode());
         response.add(addr);
@@ -86,8 +88,9 @@ struct contextTHWS
 struct contextDaemon
 {
     WiFiModule &wifi;
+    volatile uint16_t *modbusData = sharedModbusData;
     FeatureStatus feature[4];
-    Feature enabledFeature[4];
+    Feature enabledFeature[4] = {FEATURE_DISABLED, FEATURE_DISABLED, FEATURE_DISABLED, FEATURE_DISABLED};
 
     contextDaemon(WiFiModule &w) : wifi(w) {}
 
