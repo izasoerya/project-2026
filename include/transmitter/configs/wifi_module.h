@@ -3,6 +3,7 @@
 
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <ESPmDNS.h>
 
 #include "wifi_bundle.h"
 #include "../base_transmitter.h"
@@ -23,6 +24,10 @@ private:
     SupabaseTransport *supabaseConfig = nullptr;
     wifi_power_t _txCConfig;
 
+    const char *_ssid;
+    const char *_password;
+    const char *_hostname;
+
     const std::function<void()> *_onProgress;
     const std::function<void()> *_onTimeout;
 
@@ -30,7 +35,8 @@ public:
     WiFiModule(
         const char *ssid, const char *password, const char *hostname,
         wifi_power_t txConfig = WIFI_POWER_19_5dBm)
-        : _txCConfig(txConfig), _inet(WiFiBundle(ssid, password, hostname, &_txCConfig)) {}
+        : _txCConfig(txConfig), _ssid(ssid), _password(password), _hostname(hostname),
+          _inet(WiFiBundle(ssid, password, hostname, &_txCConfig)) {}
     ~WiFiModule() override = default;
 
     const char *localIP()
@@ -49,6 +55,48 @@ public:
         if (_inet.begin(onProgress, onTimeout)) // Restart on fail set to true
             return true;
         return false;
+    }
+
+    void beginNB(std::function<void(bool)> onResult = nullptr)
+    {
+        struct AsyncWiFiTask
+        {
+            const char *ssid;
+            const char *password;
+            const char *hostname;
+            wifi_power_t txConfig;
+            std::function<void(bool)> callback;
+        };
+
+        AsyncWiFiTask *params = new AsyncWiFiTask{
+            _ssid, _password, _hostname, _txCConfig, onResult};
+
+        xTaskCreate([](void *pvParam)
+                    {
+                    AsyncWiFiTask *p = static_cast<AsyncWiFiTask *>(pvParam);
+                    
+                    WiFi.setHostname(p->hostname);
+                    WiFi.begin(p->ssid, p->password);
+                    WiFi.setTxPower(p->txConfig);
+
+                    Serial.printf("Hostname: %s\n", p->hostname);
+                    
+                    uint32_t start = millis();
+                    while (WiFi.status() != WL_CONNECTED && millis() - start < 20000)
+                        vTaskDelay(500 / portTICK_PERIOD_MS);
+                    
+                    bool success = WiFi.status() == WL_CONNECTED;
+                    if (p->callback)    
+                        p->callback(success);
+                    
+                    if (success) {
+                        if (!MDNS.begin(p->hostname))
+                        MDNS.addService("http", "tcp", 80);
+                    }
+                    
+                    delete p;
+                    vTaskDelete(NULL); },
+                    "Connect WiFi", 2048, params, 1, nullptr);
     }
 
     IPAddress resolveMDNS(const char *hostname)
