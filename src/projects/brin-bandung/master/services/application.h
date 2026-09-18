@@ -11,12 +11,14 @@
 #include "../models/task_context.h"
 #include "../datastore/sensor_datastore.h"
 #include "../utils/parser.h"
+#include "../services/command_parser.h"
 
 TaskHandle_t handleReadRainfall;
 TaskHandle_t handleMBSlave;
 TaskHandle_t handleDaemon;
 TaskHandle_t handleDisplay;
 TaskHandle_t handlePublish;
+TaskHandle_t handleOta;
 
 SensorRainfallDatastore singletonSensorRainfall;
 SensorWSDatastore singletonSensorWS;
@@ -35,23 +37,60 @@ public:
         queueSensorDashboard = xQueueCreate(10, sizeof(SensorPublishableObject));
     }
 
+    static void taskPollOta(void *pvParam)
+    {
+        contextDaemon *ctx = static_cast<contextDaemon *>(pvParam);
+
+        static bool isWiFiConnected = false;
+        Serial.println("Connecting to WiFi");
+        ctx->wifi.beginNB([](bool t)
+                          { isWiFiConnected = t; });
+        while (!isWiFiConnected)
+            vTaskDelay(500 / portTICK_PERIOD_MS);
+        Serial.printf("Connected with IP: %s\n", ctx->wifi.localIP());
+
+        AsyncWebServer server(80);
+        ElegantOTA.begin(&server);
+        ElegantOTA.setAutoReboot(true);
+        WebSerial.begin(&server);
+        WebSerial.onMessage(
+            [ctx](uint8_t *data, size_t len)
+            {
+                EnabledOTA res = CommandParser::otaCommand(data, len);
+                if (static_cast<uint8_t>(res) != 0)
+                {
+                    if (res == EnabledOTA::SLAVE_WS_ON)
+                        ctx->modbusData[6] = 1;
+                    else if (res == EnabledOTA::SLAVE_WS_OFF)
+                        ctx->modbusData[6] = 0;
+                    else if (res == EnabledOTA::SLAVE_ARR_ON)
+                        ctx->modbusData[7] = 1;
+                    else if (res == EnabledOTA::SLAVE_ARR_OFF)
+                        ctx->modbusData[7] = 0;
+                }
+            });
+        server.begin();
+
+        while (1)
+        {
+            ElegantOTA.loop();
+            WebSerial.loop();
+
+            vTaskDelay(20 / portTICK_PERIOD_MS);
+        }
+    }
+
     static void taskDaemon(void *pvParam)
     {
         contextDaemon *ctx = static_cast<contextDaemon *>(pvParam);
         static uint32_t prevReconnect = millis();
         static uint32_t prevCheckNTP = millis();
-        static uint32_t prevSecondLog = millis();
         static uint32_t prevCheckInternet = millis();
 
         while (1)
         {
-            if (millis() - prevSecondLog > 1000)
-            {
-                prevSecondLog = millis();
-
-                TimeStruct ts = NTPService::getTime();
-                Serial.printf("Time: %d:%d:%d\n", ts.hour, ts.minute, ts.second);
-            }
+            TimeStruct ts = NTPService::getTime();
+            Serial.printf("Time: %d:%d:%d\n", ts.hour, ts.minute, ts.second);
 
             if (ctx->getNTPStatus() == FeatureStatus::NTP && millis() - prevCheckNTP > 1000)
             {
@@ -63,13 +102,14 @@ public:
                 prevCheckNTP = millis();
 
             if (WiFi.status() != WL_CONNECTED)
-            {
-                Serial.println("WiFi disconnected!");
-                if (millis() - prevReconnect > 10000)
-                    esp_restart();
-            }
-            else
-                prevReconnect = millis();
+                if (millis() - prevReconnect > 20000)
+                {
+                    prevReconnect = millis();
+
+                    Serial.printf("Reconnecting...\n");
+                    ctx->wifi.disconnect();
+                    ctx->wifi.beginNB();
+                }
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
@@ -81,6 +121,7 @@ public:
         ModbusClientRTU mb;
         SensorRainfallObject sensor;
         uint32_t stampMBCounter = 0;
+        uint16_t oldStateOTA = ctx->modbusData[7];
 
         RTUutils::prepareHardwareSerial(ctx->serial);
         ctx->serial.begin(9600, SERIAL_8N1, ctx->pinRX, ctx->pinTX);
@@ -109,6 +150,14 @@ public:
                 xQueueSend(queueSensorRainfall, &sensor, pdTICKS_TO_MS(10));
             }
             xQueueSend(queueSensorRainfall, &sensor, pdTICKS_TO_MS(10));
+
+            if (oldStateOTA != ctx->modbusData[7])
+            {
+                Error err = mb.addRequest((uint32_t)stampMBCounter, // Token
+                                          1, WRITE_HOLD_REGISTER, 7, ctx->modbusData[7]);
+                oldStateOTA = ctx->modbusData[7];
+            }
+
             vTaskDelay(10000 / portTICK_PERIOD_MS);
         }
     }
@@ -120,6 +169,7 @@ public:
         SensorWSObject sensorWS;
         SensorRainfallObject sensorRain;
         uint32_t stampMBCounter = 0;
+        uint16_t oldStateOTA = ctx->modbusData[6];
 
         RTUutils::prepareHardwareSerial(ctx->serial);
         ctx->serial.begin(9600, SERIAL_8N1, ctx->pinRX, ctx->pinTX);
@@ -132,7 +182,7 @@ public:
         while (1)
         {
             Error err = mb.addRequest((uint32_t)stampMBCounter, // Token
-                                      1, READ_HOLD_REGISTER, 0, 8);
+                                      1, READ_HOLD_REGISTER, 0, 4);
             if (err != SUCCESS)
             {
                 // TODO: HANDLE IF READ MODBUS ERROR
@@ -150,6 +200,11 @@ public:
 
                 xQueueSend(queueSensorWS, &sensorWS, pdTICKS_TO_MS(10));
             }
+
+            Serial.printf("[INFO] MB ADDR[6] = %d\n", ctx->modbusData[6]);
+            Error errorOTAWS = mb.addRequest((uint32_t)stampMBCounter, // Token
+                                             1, WRITE_HOLD_REGISTER, 6, ctx->modbusData[6]);
+
             vTaskDelay(10000 / portTICK_PERIOD_MS);
         }
     }
