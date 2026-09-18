@@ -15,22 +15,22 @@ public:
         memcpy(buffer, data, len);
         buffer[len] = '\0';
 
-        if (strcmp(buffer, "ENABLE_OTA_SLAVE_WS"))
+        if (strcmp(buffer, "ENABLE_OTA_SLAVE_WS") == 0)
         {
             Serial.printf("[INFO] Message Valid: %s\n", buffer);
             return EnabledOTA::SLAVE_WS_ON;
         }
-        else if (strcmp(buffer, "DISABLE_OTA_SLAVE_WS"))
+        else if (strcmp(buffer, "DISABLE_OTA_SLAVE_WS") == 0)
         {
             Serial.printf("[INFO] Message Valid: %s\n", buffer);
             return EnabledOTA::SLAVE_WS_OFF;
         }
-        else if (strcmp(buffer, "ENABLE_OTA_SLAVE_ARR"))
+        else if (strcmp(buffer, "ENABLE_OTA_SLAVE_ARR") == 0)
         {
             Serial.printf("[INFO] Message Valid: %s\n", buffer);
             return EnabledOTA::SLAVE_ARR_ON;
         }
-        else if (strcmp(buffer, "DISABLE_OTA_SLAVE_ARR"))
+        else if (strcmp(buffer, "DISABLE_OTA_SLAVE_ARR") == 0)
         {
             Serial.printf("[INFO] Message Valid: %s\n", buffer);
             return EnabledOTA::SLAVE_ARR_OFF;
