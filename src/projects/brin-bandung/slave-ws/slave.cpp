@@ -27,7 +27,7 @@ void setup()
     Serial.begin(115200);
 
     static char hostname[64];
-    snprintf(hostname, sizeof(hostname), "slave-arr-bandung-persemaian-%d", DEVICE_ID + 1);
+    snprintf(hostname, sizeof(hostname), "T4T-WS-SLAVE-%d", DEVICE_ID + 1);
     static WiFiModule wifi(ssid, password, hostname, WIFI_POWER_8_5dBm);
     static contextDaemon daemonCtx(wifi);
     daemonCtx.setInternetStatus(FeatureStatus::INTERNET); // Default to not working
