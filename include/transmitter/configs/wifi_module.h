@@ -96,8 +96,33 @@ public:
                     
                     delete p;
                     vTaskDelete(NULL); },
-                    "Connect WiFi", 2048, params, 1, nullptr);
+                    "Connect WiFi", 4096, params, 1, nullptr);
     }
+
+    void disconnect() { WiFi.disconnect(); }
+
+    // void reconnect()
+    // {
+    //     if (WiFi.status() != WL_CONNECTED)
+    //     {
+    //         xTaskCreate(
+    //             [](void *pvParam)
+    //             {
+    //                 static uint32_t prevTime = millis();
+    //                 while (WiFi.status() != WL_CONNECTED)
+    //                 {
+    //                     vTaskDelay(500 / portTICK_PERIOD_MS);
+    //                     if (millis() - prevTime > 20000)
+    //                     {
+    //                         disconnect();
+    //                         beginNB();
+    //                     }
+    //                 }
+    //                 vTaskDelete(NULL);
+    //             },
+    //             "Polling reconnect", 2048, nullptr, 1, nullptr);
+    //     }
+    // }
 
     IPAddress resolveMDNS(const char *hostname)
     {
