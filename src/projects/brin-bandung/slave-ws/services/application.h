@@ -111,14 +111,11 @@ public:
                           uxTaskGetStackHighWaterMark(handleDaemon),
                           uxTaskGetStackHighWaterMark(handleOta));
 
-            ctx->modbusData[6] = true;
-
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
     }
 
-    static void
-    taskReadWD(void *pvParam)
+    static void taskReadWD(void *pvParam)
     {
         contextWD *wdCtx = static_cast<contextWD *>(pvParam);
         wdCtx->serial.begin(9600, SERIAL_8N1, wdCtx->pinRX, wdCtx->pinTX);
