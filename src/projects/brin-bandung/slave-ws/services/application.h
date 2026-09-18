@@ -1,18 +1,22 @@
 #if !defined(APPLICATION_H)
 #define APPLICATION_H
 
+#include <ElegantOTA.h>
+#include <WebSerial.h>
 #include <ModbusServerRTU.h>
 #include <RTUutils.h>
 #include <ClosedCube_SHT31D.h>
+
 #include "../../include/sensor/filters/moving_average.h"
 #include "../models/task_context.h"
 #include "../datastore/sensor_datastore.h"
 #include "../utils/parser.h"
 
-TaskHandle_t handleReadWD;
-TaskHandle_t handleReadTHWS;
-TaskHandle_t handleMBSlave;
-TaskHandle_t handleDaemon;
+TaskHandle_t handleReadWD = NULL;
+TaskHandle_t handleReadTHWS = NULL;
+TaskHandle_t handleMBSlave = NULL;
+TaskHandle_t handleDaemon = NULL;
+TaskHandle_t handleOta = NULL;
 
 volatile uint32_t counterAnemo;
 volatile WindDirectionEnum windDirection;
@@ -28,6 +32,35 @@ public:
         queueSensorDatastore = xQueueCreate(10, sizeof(SensorDatastore));
     }
 
+    static void taskPollOta(void *pvParam)
+    {
+        contextDaemon *ctx = static_cast<contextDaemon *>(pvParam);
+        vTaskSuspend(NULL);
+
+        WireGuard wg;
+        WireGuardConfig wgConfig = wgConfigs[0]; // TODO: CHANGE BASED ON SETUP
+        IPAddress wgLocalIP;
+        wgLocalIP.fromString(wgConfig.master.localIp);
+        Serial.printf("wg ip: %s\n", wgLocalIP.toString());
+        bool wgOk = wg.begin(wgLocalIP, wgConfig.master.privateKey,
+                             WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
+        if (!wgOk)
+            ctx->setWireGuardStatus(FeatureStatus::WIREGUARD);
+
+        AsyncWebServer server(80);
+        ElegantOTA.begin(&server);
+        ElegantOTA.setAutoReboot(true);
+        WebSerial.begin(&server);
+
+        while (1)
+        {
+            ElegantOTA.loop();
+            WebSerial.loop();
+
+            vTaskDelay(10 / portTICK_PERIOD_MS);
+        }
+    }
+
     static void taskDaemon(void *pvParam)
     {
         contextDaemon *ctx = static_cast<contextDaemon *>(pvParam);
@@ -36,24 +69,42 @@ public:
 
         while (1)
         {
+            if (ctx->modbusData[5] == 1)
+                ctx->enabledFeature[0] == Feature::INTERNET_FEAUTRE;
+            if (ctx->modbusData[6] == 1)
+                ctx->enabledFeature[1] == Feature::OTA_FEATURE;
+
             for (int i = 0; i < sizeof(ctx->enabledFeature) / sizeof(Feature); i++)
             {
                 if (ctx->enabledFeature[i] == Feature::INTERNET_FEAUTRE)
-                {
                     if (WiFi.status() != WL_CONNECTED)
+                    {
+                        static uint32_t prevConnect = 0;
+                        if (millis() - prevConnect > 15000) // Timeout on 15 second
+                        {
+                            prevConnect = millis();
+                            ctx->wifi.begin([]() {}, []() {});
+                        }
                         ctx->setInternetStatus(FeatureStatus::INTERNET);
+                    }
                     else if (WiFi.status() == WL_CONNECTED)
                         ctx->setInternetStatus(FeatureStatus::WORKING);
-                }
 
-                if (ctx->enabledFeature[i] == Feature::NTP_FEATURE)
-                {
-                    TimeStruct ts = NTPService::getTime();
+                if (ctx->enabledFeature[i] == Feature::OTA_FEATURE)
                     if (ctx->getNTPStatus() == FeatureStatus::NTP)
-                        ctx->setNTPStatus(FeatureStatus::WORKING);
-                    else
-                        ctx->setNTPStatus(FeatureStatus::NTP);
-                }
+                    {
+                        static uint32_t prevNTP = 0;
+                        if (millis() - prevNTP > 15000) // Timeout on 15 second
+                        {
+                            prevNTP = millis();
+                            if (NTPService::init())
+                                ctx->setNTPStatus(FeatureStatus::WORKING);
+                        }
+                    }
+                    else if (handleOta != nullptr)
+                        vTaskResume(handleOta);
+                    else if (handleOta != nullptr)
+                        vTaskSuspend(handleOta);
             }
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -64,7 +115,6 @@ public:
     {
         contextWD *wdCtx = static_cast<contextWD *>(pvParam);
         wdCtx->serial.begin(9600, SERIAL_8N1, wdCtx->pinRX, wdCtx->pinTX);
-
         while (1)
         {
             String data = wdCtx->serial.readString(); // data yang diterima dari sensor berawalan tanda * dan diakhiri tanda #, contoh *1#
@@ -150,10 +200,10 @@ public:
             if (xQueueReceive(queueSensorDatastore, &payload, 0) == pdPASS)
             {
                 Serial.printf("[INFO] Receive sensor queue: %s", payload.toString());
-                mbCtx->data[0] = uint16_t(10);
-                mbCtx->data[1] = uint16_t(payload.humidity * 10);
-                mbCtx->data[2] = uint16_t(payload.windSpeed * 10);
-                mbCtx->data[3] = uint16_t(payload.windDirection);
+                mbCtx->modbusData[0] = uint16_t(10);
+                mbCtx->modbusData[1] = uint16_t(payload.humidity * 10);
+                mbCtx->modbusData[2] = uint16_t(payload.windSpeed * 10);
+                mbCtx->modbusData[3] = uint16_t(payload.windDirection);
             }
 
             vTaskDelay(2000 / portTICK_PERIOD_MS);
