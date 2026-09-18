@@ -8,10 +8,13 @@
 #include "../utils/enum.h"
 #include "wifi_bundle.h"
 
+static volatile uint16_t sharedModbusData[8];
+
 struct contextDaemon
 {
     WiFiModule &wifi;
     FeatureStatus feature[4];
+    volatile uint16_t *modbusData = sharedModbusData;
 
     contextDaemon(WiFiModule &w) : wifi(w) {}
 
@@ -29,8 +32,7 @@ struct contextDaemon
 struct contextMBWS
 {
     HardwareSerial &serial;
-    static const size_t MAX_REGISTER = 8;
-    volatile uint16_t data[MAX_REGISTER];
+    volatile uint16_t *modbusData = sharedModbusData;
     const uint8_t pinRX = 21; // 21
     const uint8_t pinTX = 20; // 20
     uint8_t errorTransactionModbusCounter = 0;
@@ -40,14 +42,14 @@ struct contextMBWS
     void onDataIncoming(ModbusMessage response, uint32_t token)
     {
         uint16_t offset = 3; // First value is on pos 3, after server ID, function code and length byte
-        offset = response.get(offset, data[0]);
-        offset = response.get(offset, data[1]);
-        offset = response.get(offset, data[2]);
-        offset = response.get(offset, data[3]);
-        offset = response.get(offset, data[4]);
-        offset = response.get(offset, data[5]);
-        offset = response.get(offset, data[6]);
-        offset = response.get(offset, data[7]);
+        offset = response.get(offset, modbusData[0]);
+        offset = response.get(offset, modbusData[1]);
+        offset = response.get(offset, modbusData[2]);
+        offset = response.get(offset, modbusData[3]);
+        offset = response.get(offset, modbusData[4]);
+        offset = response.get(offset, modbusData[5]);
+        offset = response.get(offset, modbusData[6]);
+        offset = response.get(offset, modbusData[7]);
         errorTransactionModbusCounter = 0;
 
         Serial.print("[INFO] MBWS Incoming FC03: ");
@@ -66,8 +68,7 @@ struct contextMBWS
 struct contextMBRainfall
 {
     HardwareSerial &serial;
-    static const size_t MAX_REGISTER = 8;
-    volatile uint16_t data[MAX_REGISTER];
+    volatile uint16_t *modbusData = sharedModbusData;
     const uint8_t pinRX = 8;
     const uint8_t pinTX = 9;
     uint8_t errorTransactionModbusCounter = 0;
@@ -77,14 +78,14 @@ struct contextMBRainfall
     void onDataIncoming(ModbusMessage response, uint32_t token)
     {
         uint16_t offset = 3; // First value is on pos 3, after server ID, function code and length byte
-        offset = response.get(offset, data[0]);
-        offset = response.get(offset, data[1]);
-        offset = response.get(offset, data[2]);
-        offset = response.get(offset, data[3]);
-        offset = response.get(offset, data[4]);
-        offset = response.get(offset, data[5]);
-        offset = response.get(offset, data[6]);
-        offset = response.get(offset, data[7]);
+        offset = response.get(offset, modbusData[0]);
+        offset = response.get(offset, modbusData[1]);
+        offset = response.get(offset, modbusData[2]);
+        offset = response.get(offset, modbusData[3]);
+        offset = response.get(offset, modbusData[4]);
+        offset = response.get(offset, modbusData[5]);
+        offset = response.get(offset, modbusData[6]);
+        offset = response.get(offset, modbusData[7]);
         errorTransactionModbusCounter = 0;
 
         Serial.print("[INFO] MBRain Incoming FC03: ");
