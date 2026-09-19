@@ -3,8 +3,33 @@
 
 #include <HardwareSerial.h>
 #include <Wire.h>
-#include "../utils/utils.h"
 #include <ModbusMessage.h>
+#include "../../include/transmitter/configs/wifi_module.h"
+#include "projects/brin-bandung/slave-arr/utils/enum.h"
+
+#define MAX_REGISTER 8
+
+volatile uint16_t sharedModbusData[MAX_REGISTER];
+
+struct contextDaemon
+{
+    WiFiModule &wifi;
+    volatile uint16_t *modbusData = sharedModbusData;
+    FeatureStatus feature[4];
+    Feature enabledFeature[4] = {FEATURE_DISABLED, FEATURE_DISABLED, FEATURE_DISABLED, FEATURE_DISABLED};
+
+    contextDaemon(WiFiModule &w) : wifi(w) {}
+
+    void setNTPStatus(FeatureStatus v) { feature[0] = v; }
+    void setInternetStatus(FeatureStatus v) { feature[1] = v; }
+    void setMQTTStatus(FeatureStatus v) { feature[2] = v; }
+    void setWireGuardStatus(FeatureStatus v) { feature[3] = v; }
+
+    FeatureStatus getNTPStatus() { return feature[0]; }
+    FeatureStatus getInternetStatus() { return feature[1]; }
+    FeatureStatus getMQTTStatus() { return feature[2]; }
+    FeatureStatus getWireGuardStatus() { return feature[3]; }
+};
 
 struct contextRainfall
 {
@@ -18,7 +43,7 @@ struct contextRainfall
 struct contextMB
 {
     HardwareSerial &serial;
-    volatile uint16_t data[8];
+    volatile uint16_t *modbusData = sharedModbusData;
     const uint8_t pinRX = 5;
     const uint8_t pinTX = 6;
 
@@ -33,11 +58,11 @@ struct contextMB
         request.get(2, address); // Since slave id starts at bytes 2
         request.get(4, words);   // Since length address starts at bytes 4
 
-        if (address && words && (address + words) <= 10)
+        if (words > 0 && (address + words) <= MAX_REGISTER)
         {
             response.add(request.getServerID(), request.getFunctionCode(), (uint8_t)(words * 2));
             for (uint16_t i = address; i < address + words; ++i)
-                response.add(data[i]);
+                response.add(modbusData[i]);
         }
         else
             response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
@@ -54,12 +79,12 @@ struct contextMB
         request.get(2, addr);  // read address from request
         request.get(4, value); // read value from request
 
-        if (addr >= 16)
+        if (addr >= MAX_REGISTER)
         {
             response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
             return response;
         }
-        data[addr] = value;
+        modbusData[addr] = value;
 
         response.add(request.getServerID(), request.getFunctionCode());
         response.add(addr);
