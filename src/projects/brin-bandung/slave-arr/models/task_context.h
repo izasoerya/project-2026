@@ -34,8 +34,8 @@ struct contextDaemon
 struct contextRainfall
 {
     TwoWire &wire;
-    const uint8_t pinSDA = 4;
-    const uint8_t pinSCL = 3;
+    const uint8_t pinSDA = 1;
+    const uint8_t pinSCL = 0;
 
     contextRainfall(TwoWire &w) : wire(w) {}
 };
@@ -44,8 +44,8 @@ struct contextMB
 {
     HardwareSerial &serial;
     volatile uint16_t *modbusData = sharedModbusData;
-    const uint8_t pinRX = 5;
-    const uint8_t pinTX = 6;
+    const uint8_t pinRX = 6;
+    const uint8_t pinTX = 5;
 
     contextMB(HardwareSerial &s) : serial(s) {}
 
