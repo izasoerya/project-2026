@@ -20,4 +20,18 @@ enum EnabledOTA
     SLAVE_WS_OFF
 };
 
+enum DeviceType
+{
+    MASTER,
+    SLAVE_WS,
+    SLAVE_ARR
+};
+
+enum CommandType
+{
+    SET_OTA,
+    SET_DELAY,
+    RESTART_DEVICE
+};
+
 #endif // ENUM_H

@@ -56,21 +56,31 @@ public:
         WebSerial.onMessage(
             [ctx](uint8_t *data, size_t len)
             {
-                EnabledOTA res = CommandParser::otaCommand(data, len);
-                if (static_cast<uint8_t>(res) != 0)
+                Command resultParse = CommandParser::parseIncoming(data, len);
+                if (resultParse.device == DeviceType::SLAVE_WS)
                 {
-                    if (res == EnabledOTA::SLAVE_WS_ON)
-                        ctx->modbusDataWS[6] = 1;
-                    else if (res == EnabledOTA::SLAVE_WS_OFF)
-                        ctx->modbusDataWS[6] = 0;
-                    else if (res == EnabledOTA::SLAVE_ARR_ON)
-                        ctx->modbusDataARR[6] = 1;
-                    else if (res == EnabledOTA::SLAVE_ARR_OFF)
-                        ctx->modbusDataARR[6] = 0;
+                    if (resultParse.cmd == CommandType::SET_OTA)
+                        ctx->modbusDataWS[6] = *resultParse.payload;
+                    else if (resultParse.cmd == CommandType::SET_DELAY)
+                        ctx->modbusDataWS[5] = *resultParse.payload;
+                    else if (resultParse.cmd == CommandType::RESTART_DEVICE)
+                        ctx->modbusDataWS[7] = *resultParse.payload;
                 }
-                else
+                else if (resultParse.device == DeviceType::SLAVE_ARR)
                 {
-                    ctx->delay->delay = CommandParser::configCommand(data, len);
+                    if (resultParse.cmd == CommandType::SET_OTA)
+                        ctx->modbusDataARR[6] = *resultParse.payload;
+                    else if (resultParse.cmd == CommandType::SET_DELAY)
+                        ctx->modbusDataARR[5] = *resultParse.payload;
+                    else if (resultParse.cmd == CommandType::RESTART_DEVICE)
+                        ctx->modbusDataARR[7] = *resultParse.payload;
+                }
+                else if (resultParse.device == DeviceType::MASTER)
+                {
+                    if (resultParse.cmd == CommandType::SET_DELAY)
+                        ctx->delay->delay = *resultParse.payload;
+                    else if (resultParse.cmd == CommandType::RESTART_DEVICE)
+                        esp_restart();
                 }
             });
         server.begin();
@@ -146,7 +156,7 @@ public:
                 Serial.printf("[INFO] Rain Modbus FC03 request queued, token: %lu\n", stampMBCounter);
                 stampMBCounter++;
 
-                sensor.rainfall = ctx->modbusData[4] / 10.0F;
+                sensor.rainfall = ctx->modbusData[0] / 10.0F;
 
                 xQueueSend(queueSensorRainfall, &sensor, pdTICKS_TO_MS(10));
             }

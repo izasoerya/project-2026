@@ -4,57 +4,64 @@
 #include <Arduino.h>
 #include "../utils/enum.h"
 
+struct Command
+{
+    DeviceType device;
+    CommandType cmd;
+    uint8_t *payload;
+    size_t len;
+};
+
 class CommandParser
 {
 public:
-    static EnabledOTA otaCommand(uint8_t *data, size_t len)
+    static Command parse(const char *buffer)
     {
-        char buffer[256];
-        if (len >= sizeof(buffer))
-            len = sizeof(buffer) - 1;
-        memcpy(buffer, data, len);
-        buffer[len] = '\0';
+        Command cmd = {};
 
-        if (strcmp(buffer, "ENABLE_OTA_SLAVE_WS") == 0)
+        if (strncmp(buffer, "MASTER:", 7) == 0)
         {
-            Serial.printf("[INFO] Message Valid: %s\n", buffer);
-            return EnabledOTA::SLAVE_WS_ON;
+            cmd.device = MASTER;
+            buffer += 7;
         }
-        else if (strcmp(buffer, "DISABLE_OTA_SLAVE_WS") == 0)
+        else if (strncmp(buffer, "SLAVE_WS:", 9) == 0)
         {
-            Serial.printf("[INFO] Message Valid: %s\n", buffer);
-            return EnabledOTA::SLAVE_WS_OFF;
+            cmd.device = SLAVE_WS;
+            buffer += 9;
         }
-        else if (strcmp(buffer, "ENABLE_OTA_SLAVE_ARR") == 0)
+        else if (strncmp(buffer, "SLAVE_ARR:", 10) == 0)
         {
-            Serial.printf("[INFO] Message Valid: %s\n", buffer);
-            return EnabledOTA::SLAVE_ARR_ON;
+            cmd.device = SLAVE_ARR;
+            buffer += 10;
         }
-        else if (strcmp(buffer, "DISABLE_OTA_SLAVE_ARR") == 0)
+
+        if (strncmp(buffer, "SET_OTA=", 8) == 0)
         {
-            Serial.printf("[INFO] Message Valid: %s\n", buffer);
-            return EnabledOTA::SLAVE_ARR_OFF;
+            cmd.cmd = SET_OTA;
+            cmd.payload = (uint8_t *)(buffer + 8);
         }
-        Serial.printf("[ERROR] Message Invalid: %s\n", buffer);
-        return EnabledOTA::INVALID;
+        else if (strncmp(buffer, "SET_DELAY=", 10) == 0)
+        {
+            cmd.cmd = SET_DELAY;
+            cmd.payload = (uint8_t *)(buffer + 10);
+        }
+        else if (strncmp(buffer, "RESTART_DEVICE", 14) == 0)
+        {
+            cmd.cmd = RESTART_DEVICE;
+        }
+
+        return cmd;
     }
 
-    static uint32_t configCommand(uint8_t *data, size_t len)
+    static Command parseIncoming(uint8_t *data, size_t len)
     {
-        char buffer[256];
+        static char buffer[256];
         if (len >= sizeof(buffer))
             len = sizeof(buffer) - 1;
         memcpy(buffer, data, len);
         buffer[len] = '\0';
-
-        int delay_value = 0;
-        if (sscanf(buffer, "SET_DELAY=%d", &delay_value) == 1)
-        {
-            Serial.printf("[INFO] SET_DELAY Valid: %d\n", delay_value);
-            return delay_value;
-        }
-        Serial.printf("[ERROR] Message Invalid: %s\n", buffer);
-        return 0;
+        Command resultParse = CommandParser::parse(buffer);
+        return resultParse;
     }
 };
 
