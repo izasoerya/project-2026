@@ -11,8 +11,8 @@
 #include "../utils/enum.h"
 #include "wifi_bundle.h"
 
-static volatile uint16_t sharedModbusDataWS[8];
-static volatile uint16_t sharedModbusDataARR[8];
+static volatile uint16_t sharedModbusDataWS[16];
+static volatile uint16_t sharedModbusDataARR[16];
 
 struct sharedDelayContext
 {
@@ -89,7 +89,7 @@ struct sharedModbusClientContext
     }
 };
 
-static sharedDelayContext *contextSharedDelay;
+static sharedDelayContext contextSharedDelay;
 
 struct contextMBWS
 {
@@ -171,7 +171,7 @@ struct contextPublisher
     const char *supabaseUrl = "https://gothabjdasaphwzrjnto.supabase.co";
     const char *supabasePublicKey = "sb_publishable_Dx3vXSh8qdQhM1Zi_V1MTQ_ifqdbX1o";
     SupabaseTransport transport = SupabaseTransport(supabaseUrl, supabasePublicKey);
-    sharedDelayContext *delay = contextSharedDelay;
+    sharedDelayContext *delay = &contextSharedDelay;
 
     contextPublisher(WiFiModule &w) : wifi(w) {}
 };
@@ -193,7 +193,7 @@ struct contextDaemon
     FeatureStatus feature[4];
     volatile uint16_t *modbusDataWS = sharedModbusDataWS;
     volatile uint16_t *modbusDataARR = sharedModbusDataARR;
-    sharedDelayContext *delay = contextSharedDelay;
+    sharedDelayContext *delay = &contextSharedDelay;
 
     contextDaemon(WiFiModule &w) : wifi(w) {}
 

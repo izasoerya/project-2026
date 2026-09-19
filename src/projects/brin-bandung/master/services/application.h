@@ -61,25 +61,25 @@ public:
                 if (resultParse.device == DeviceType::SLAVE_WS)
                 {
                     if (resultParse.cmd == CommandType::SET_OTA)
-                        ctx->modbusDataWS[6] = *resultParse.payload;
+                        ctx->modbusDataWS[6] = resultParse.payload;
                     else if (resultParse.cmd == CommandType::SET_DELAY)
-                        ctx->modbusDataWS[5] = *resultParse.payload;
+                        ctx->modbusDataWS[5] = resultParse.payload;
                     else if (resultParse.cmd == CommandType::RESTART_DEVICE)
-                        ctx->modbusDataWS[7] = *resultParse.payload;
+                        ctx->modbusDataWS[7] = resultParse.payload;
                 }
                 else if (resultParse.device == DeviceType::SLAVE_ARR)
                 {
                     if (resultParse.cmd == CommandType::SET_OTA)
-                        ctx->modbusDataARR[6] = *resultParse.payload;
+                        ctx->modbusDataARR[6] = resultParse.payload;
                     else if (resultParse.cmd == CommandType::SET_DELAY)
-                        ctx->modbusDataARR[5] = *resultParse.payload;
+                        ctx->modbusDataARR[5] = resultParse.payload;
                     else if (resultParse.cmd == CommandType::RESTART_DEVICE)
-                        ctx->modbusDataARR[7] = *resultParse.payload;
+                        ctx->modbusDataARR[7] = resultParse.payload;
                 }
                 else if (resultParse.device == DeviceType::MASTER)
                 {
                     if (resultParse.cmd == CommandType::SET_DELAY)
-                        ctx->delay->delay = *resultParse.payload;
+                        ctx->delay->delay = resultParse.payload;
                     else if (resultParse.cmd == CommandType::RESTART_DEVICE)
                         esp_restart();
                 }
@@ -166,7 +166,7 @@ public:
             if (oldStateOTA != ctx->modbusData[6])
             {
                 Error err = ctx->sharedClient.addRequest((uint32_t)(stampMBCounter << 1),
-                                                         2, WRITE_HOLD_REGISTER, 6, ctx->modbusData[7]);
+                                                         2, WRITE_HOLD_REGISTER, 6, ctx->modbusData[6]);
                 stampMBCounter++;
                 oldStateOTA = ctx->modbusData[6];
             }
@@ -223,7 +223,7 @@ public:
             if (oldStateOTA != ctx->modbusData[6])
             {
                 Error err = ctx->sharedClient.addRequest((uint32_t)(stampMBCounter << 1),
-                                                         2, WRITE_HOLD_REGISTER, 6, ctx->modbusData[7]);
+                                                         1, WRITE_HOLD_REGISTER, 6, ctx->modbusData[7]);
                 stampMBCounter++;
                 oldStateOTA = ctx->modbusData[6];
             }
@@ -234,7 +234,7 @@ public:
             uint16_t timestamp[] = {highWord, lowWord};
             Error timestampError = ctx->sharedClient.addRequests(
                 (uint32_t)(stampMBCounter << 1),
-                2, WRITE_MULT_REGISTERS, 8, 2, sizeof(timestamp), timestamp);
+                1, WRITE_MULT_REGISTERS, 8, 2, sizeof(timestamp), timestamp);
             stampMBCounter++;
 
             vTaskDelay(10000 / portTICK_PERIOD_MS);

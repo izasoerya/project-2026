@@ -8,7 +8,7 @@ struct Command
 {
     DeviceType device;
     CommandType cmd;
-    uint8_t *payload;
+    uint32_t payload;
     size_t len;
 };
 
@@ -38,12 +38,12 @@ public:
         if (strncmp(buffer, "SET_OTA=", 8) == 0)
         {
             cmd.cmd = SET_OTA;
-            cmd.payload = (uint8_t *)(buffer + 8);
+            cmd.payload = strtoul(buffer + 8, nullptr, 10);
         }
         else if (strncmp(buffer, "SET_DELAY=", 10) == 0)
         {
             cmd.cmd = SET_DELAY;
-            cmd.payload = (uint8_t *)(buffer + 10);
+            cmd.payload = strtoul(buffer + 10, nullptr, 10);
         }
         else if (strncmp(buffer, "RESTART_DEVICE", 14) == 0)
         {
