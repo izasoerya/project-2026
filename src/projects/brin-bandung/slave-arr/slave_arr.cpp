@@ -27,6 +27,7 @@ void setup()
     static contextDaemon daemonCtx(wifi);
 
     Application::init();
+    configTime(7 * 3600, 0, nullptr, nullptr, nullptr);
 
     static contextRainfall rainCtx(Wire);
     static contextMB mbCtx(Serial0);

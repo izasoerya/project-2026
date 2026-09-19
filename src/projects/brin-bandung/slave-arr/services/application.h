@@ -99,16 +99,22 @@ public:
             else if (ctx->modbusData[7] == 1)
                 esp_restart();
 
+            static uint32_t lastSyncedUnix = 0;
             uint32_t unixTime = ModbusUtility::decodeUint32(
                 ctx->modbusData[8], ctx->modbusData[9]);
-            NTPService::setTime(unixTime);
+            if (unixTime != lastSyncedUnix && unixTime > 1672531200)
+            {
+                NTPService::setTime(unixTime);
+                lastSyncedUnix = unixTime;
+                Serial.printf("[INFO] Time synced: %lu\n", unixTime);
+            }
 
             time_t now = time(nullptr);
             bool isTimeSet = (now > 1672531200); // After Jan 1, 2023
             if (isTimeSet)
             {
                 TimeStruct ts = NTPService::getTime();
-                Serial.printf("Clock: %d:%d:%d\n", now);
+                Serial.printf("Clock: %d:%d:%d\n", ts.hour, ts.minute, ts.second);
             }
 
             if (ctx->enabledFeature[0] == Feature::INTERNET_FEAUTRE)
@@ -138,8 +144,6 @@ public:
                           uxTaskGetStackHighWaterMark(handleMBSlave),
                           uxTaskGetStackHighWaterMark(handleDaemon),
                           uxTaskGetStackHighWaterMark(handleOta));
-
-            Serial.printf("TEST NVS: %.1f\n", NVSManager::getTest());
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
@@ -182,15 +186,15 @@ public:
             else
                 Serial.println("Failed to update sensor datastore");
 
-            TimeStruct ts = NTPService::getTime();
-            if (ts.hour == 0 && ts.minute == 0 && !resetDoneToday)
-            {
-                rainSensor.setRainAccumulatedValue(0);
-                NVSManager::storeRainfall(0.0F);
-                resetDoneToday = true;
-            }
-            else if (ts.hour != 0 || ts.minute != 0)
-                resetDoneToday = false;
+            // TimeStruct ts = NTPService::getTime();
+            // if (ts.hour == 0 && ts.minute == 0 && !resetDoneToday)
+            // {
+            //     rainSensor.setRainAccumulatedValue(0);
+            //     NVSManager::storeRainfall(0.0F);
+            //     resetDoneToday = true;
+            // }
+            // else if (ts.hour != 0 || ts.minute != 0)
+            //     resetDoneToday = false;
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
@@ -207,6 +211,8 @@ public:
                                 { return mbCtx->FC03(request); });
         mbServer.registerWorker(0x02, WRITE_HOLD_REGISTER, [mbCtx](ModbusMessage request)
                                 { return mbCtx->FC06(request); });
+        mbServer.registerWorker(0x02, WRITE_MULT_REGISTERS, [mbCtx](ModbusMessage request)
+                                { return mbCtx->FC16(request); });
         mbServer.begin(mbCtx->serial);
         while (1)
         {

@@ -58,6 +58,11 @@ struct contextMB
         request.get(2, address); // Since slave id starts at bytes 2
         request.get(4, words);   // Since length address starts at bytes 4
 
+        Serial.printf("[INFO] FC03 Req -> Server ID: %d, FC: %02X, Total Byte: %d\n",
+                      request.getServerID(),
+                      request.getFunctionCode(),
+                      request.size());
+
         if (words > 0 && (address + words) <= MAX_REGISTER)
         {
             response.add(request.getServerID(), request.getFunctionCode(), (uint8_t)(words * 2));
@@ -79,6 +84,12 @@ struct contextMB
         request.get(2, addr);  // read address from request
         request.get(4, value); // read value from request
 
+        Serial.printf("[INFO] FC06 Req -> Server ID: %d, FC: %02X, Reg: %d, Value: %d\n",
+                      request.getServerID(),
+                      request.getFunctionCode(),
+                      addr,
+                      value);
+
         if (addr >= MAX_REGISTER)
         {
             response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
@@ -90,6 +101,33 @@ struct contextMB
         response.add(addr);
         response.add(value);
 
+        return response;
+    }
+
+    ModbusMessage FC16(ModbusMessage request)
+    {
+        ModbusMessage response;
+        uint16_t address = 0;
+        uint16_t words = 0;
+        uint8_t byteCount = 0;
+
+        request.get(2, address);
+        request.get(4, words);
+        request.get(6, byteCount);
+
+        if (words == 0 || byteCount != words * 2 || address + words > MAX_REGISTER)
+        {
+            response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
+            return response;
+        }
+
+        uint16_t offset = 7;
+        for (uint16_t index = 0; index < words; ++index)
+            offset = request.get(offset, modbusData[address + index]);
+
+        response.add(request.getServerID(), request.getFunctionCode());
+        response.add(address);
+        response.add(words);
         return response;
     }
 };
