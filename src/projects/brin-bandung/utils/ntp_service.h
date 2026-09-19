@@ -46,6 +46,14 @@ public:
         return true;
     }
 
+    static void setTime(uint32_t unix)
+    {
+        struct timeval tv;
+        tv.tv_sec = unix;
+        tv.tv_usec = 0;
+        settimeofday(&tv, NULL);
+    }
+
     static TimeStruct getTime()
     {
         struct tm timeinfo;

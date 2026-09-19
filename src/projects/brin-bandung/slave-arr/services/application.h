@@ -2,12 +2,11 @@
 #define APPLICATION_H
 
 #include <ModbusServerRTU.h>
-#include "../../include/sensor/filters/moving_average.h"
-#include "../models/task_context.h"
-#include "../datastore/sensor_datastore.h"
-#include "../utils/parser.h"
 #include "nvs_manager.h"
-#include <projects/brin-bandung/slave-arr/utils/enum.h>
+#include "projects/brin-bandung/slave-arr/utils/enum.h"
+#include "projects/brin-bandung/slave-arr/models/task_context.h"
+#include "projects/brin-bandung/slave-arr/utils/modbus_utility.h"
+#include "projects/brin-bandung/slave-arr/datastore/sensor_datastore.h"
 
 TaskHandle_t handleReadRainfall;
 TaskHandle_t handleMBSlave;
@@ -97,6 +96,20 @@ public:
                 ctx->enabledFeature[1] = Feature::OTA_FEATURE;
             else if (ctx->modbusData[6] == 0)
                 ctx->enabledFeature[1] = Feature::FEATURE_DISABLED;
+            else if (ctx->modbusData[7] == 1)
+                esp_restart();
+
+            uint32_t unixTime = ModbusUtility::decodeUint32(
+                ctx->modbusData[8], ctx->modbusData[9]);
+            NTPService::setTime(unixTime);
+
+            time_t now = time(nullptr);
+            bool isTimeSet = (now > 1672531200); // After Jan 1, 2023
+            if (isTimeSet)
+            {
+                TimeStruct ts = NTPService::getTime();
+                Serial.printf("Clock: %d:%d:%d\n", now);
+            }
 
             if (ctx->enabledFeature[0] == Feature::INTERNET_FEAUTRE)
                 if (WiFi.status() != WL_CONNECTED)
@@ -190,9 +203,9 @@ public:
         SensorObject payload;
 
         mbCtx->serial.begin(9600, SERIAL_8N1, mbCtx->pinRX, mbCtx->pinTX);
-        mbServer.registerWorker(0x01, READ_HOLD_REGISTER, [mbCtx](ModbusMessage request)
+        mbServer.registerWorker(0x02, READ_HOLD_REGISTER, [mbCtx](ModbusMessage request)
                                 { return mbCtx->FC03(request); });
-        mbServer.registerWorker(0x01, WRITE_HOLD_REGISTER, [mbCtx](ModbusMessage request)
+        mbServer.registerWorker(0x02, WRITE_HOLD_REGISTER, [mbCtx](ModbusMessage request)
                                 { return mbCtx->FC06(request); });
         mbServer.begin(mbCtx->serial);
         while (1)
