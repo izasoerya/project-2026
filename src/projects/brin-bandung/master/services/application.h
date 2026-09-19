@@ -12,6 +12,7 @@
 #include "../datastore/sensor_datastore.h"
 #include "../utils/parser.h"
 #include "../services/command_parser.h"
+#include <projects/brin-bandung/slave-arr/utils/modbus_utility.h>
 
 TaskHandle_t handleReadRainfall;
 TaskHandle_t handleMBSlave;
@@ -170,6 +171,15 @@ public:
                 oldStateOTA = ctx->modbusData[6];
             }
 
+            time_t now;
+            uint16_t highWord, lowWord;
+            ModbusUtility::encodeUint32(static_cast<uint32_t>(time(&now)), highWord, lowWord);
+            uint16_t timestamp[] = {highWord, lowWord};
+            Error timestampError = ctx->sharedClient.addRequests(
+                (uint32_t)(stampMBCounter << 1),
+                2, WRITE_MULT_REGISTERS, 8, 2, sizeof(timestamp), timestamp);
+            stampMBCounter++;
+
             vTaskDelay(10000 / portTICK_PERIOD_MS);
         }
     }
@@ -210,9 +220,21 @@ public:
                 xQueueSend(queueSensorWS, &sensorWS, pdTICKS_TO_MS(10));
             }
 
-            Serial.printf("[INFO] MB ADDR[6] = %d\n", ctx->modbusData[6]);
-            Error errorOTAWS = ctx->sharedClient.addRequest((uint32_t)((stampMBCounter << 1) | 1),
-                                                            1, WRITE_HOLD_REGISTER, 6, ctx->modbusData[6]);
+            if (oldStateOTA != ctx->modbusData[6])
+            {
+                Error err = ctx->sharedClient.addRequest((uint32_t)(stampMBCounter << 1),
+                                                         2, WRITE_HOLD_REGISTER, 6, ctx->modbusData[7]);
+                stampMBCounter++;
+                oldStateOTA = ctx->modbusData[6];
+            }
+
+            time_t now;
+            uint16_t highWord, lowWord;
+            ModbusUtility::encodeUint32(static_cast<uint32_t>(time(&now)), highWord, lowWord);
+            uint16_t timestamp[] = {highWord, lowWord};
+            Error timestampError = ctx->sharedClient.addRequests(
+                (uint32_t)(stampMBCounter << 1),
+                2, WRITE_MULT_REGISTERS, 8, 2, sizeof(timestamp), timestamp);
             stampMBCounter++;
 
             vTaskDelay(10000 / portTICK_PERIOD_MS);
