@@ -88,6 +88,8 @@ public:
                     bool success = WiFi.status() == WL_CONNECTED;
                     if (p->callback)    
                         p->callback(success);
+                    Serial.printf("Connected with IP: %s\n", WiFi.localIP().toString());
+
                     
                     if (success) {
                         if (!MDNS.begin(p->hostname))
