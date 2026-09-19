@@ -11,6 +11,7 @@
 #include "../models/task_context.h"
 #include "../datastore/sensor_datastore.h"
 #include "../utils/parser.h"
+#include "../utils/modbus_utility.h"
 
 TaskHandle_t handleReadWD = NULL;
 TaskHandle_t handleReadTHWS = NULL;
@@ -29,7 +30,7 @@ class Application
 public:
     static void init()
     {
-        queueSensorDatastore = xQueueCreate(10, sizeof(SensorDatastore));
+        queueSensorDatastore = xQueueCreate(10, sizeof(SensorObject));
     }
 
     static void taskPollOta(void *pvParam)
@@ -99,10 +100,32 @@ public:
         {
             if (ctx->modbusData[5] == 1)
                 ctx->enabledFeature[0] = Feature::INTERNET_FEAUTRE;
+            else if (ctx->modbusData[5] == 0)
+                ctx->enabledFeature[0] = Feature::FEATURE_DISABLED;
             if (ctx->modbusData[6] == 1)
                 ctx->enabledFeature[1] = Feature::OTA_FEATURE;
             else if (ctx->modbusData[6] == 0)
                 ctx->enabledFeature[1] = Feature::FEATURE_DISABLED;
+            else if (ctx->modbusData[7] == 1)
+                esp_restart();
+
+            static uint32_t lastSyncedUnix = 0;
+            uint32_t unixTime = ModbusUtility::decodeUint32(
+                ctx->modbusData[8], ctx->modbusData[9]);
+            if (unixTime != lastSyncedUnix && unixTime > 1672531200)
+            {
+                NTPService::setTime(unixTime);
+                lastSyncedUnix = unixTime;
+                Serial.printf("[INFO] Time synced: %lu\n", unixTime);
+            }
+
+            time_t now = time(nullptr);
+            bool isTimeSet = (now > 1672531200); // After Jan 1, 2023
+            if (isTimeSet)
+            {
+                TimeStruct ts = NTPService::getTime();
+                Serial.printf("Clock: %d:%d:%d\n", ts.hour, ts.minute, ts.second);
+            }
 
             if (ctx->enabledFeature[0] == Feature::INTERNET_FEAUTRE)
                 if (WiFi.status() != WL_CONNECTED)
@@ -195,7 +218,7 @@ public:
             };
             if (singletonSensor.update(snapshot))
             {
-                xQueueSend(queueSensorDatastore, &singletonSensor, pdMS_TO_TICKS(10));
+                xQueueSend(queueSensorDatastore, &snapshot, pdMS_TO_TICKS(10));
                 Serial.printf("[INFO] Push sensor to queue: %s", snapshot.toString());
             }
             else
@@ -220,6 +243,8 @@ public:
                                 { return mbCtx->FC03(request); });
         mbServer.registerWorker(0x01, WRITE_HOLD_REGISTER, [mbCtx](ModbusMessage request)
                                 { return mbCtx->FC06(request); });
+        mbServer.registerWorker(0x01, WRITE_MULT_REGISTERS, [mbCtx](ModbusMessage request)
+                                { return mbCtx->FC16(request); });
         mbServer.begin(mbCtx->serial);
         while (1)
         {

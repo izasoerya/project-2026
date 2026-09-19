@@ -34,6 +34,7 @@ void setup()
     daemonCtx.setNTPStatus(FeatureStatus::NTP);           // Default to not working
 
     Application::init();
+    configTime(7 * 3600, 0, nullptr, nullptr, nullptr);
 
     static contextTHWS sensorCtx(Wire);
     static contextMB mbCtx(Serial1);
