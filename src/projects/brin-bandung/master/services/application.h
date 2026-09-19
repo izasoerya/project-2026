@@ -58,6 +58,10 @@ public:
             [ctx](uint8_t *data, size_t len)
             {
                 Command resultParse = CommandParser::parseIncoming(data, len);
+                Serial.printf("[INFO] Command received: device=%d cmd=%d payload=%lu\n",
+                              resultParse.device,
+                              resultParse.cmd,
+                              resultParse.payload);
                 if (resultParse.device == DeviceType::SLAVE_WS)
                 {
                     if (resultParse.cmd == CommandType::SET_OTA)
@@ -165,8 +169,10 @@ public:
 
             if (oldStateOTA != ctx->modbusData[6])
             {
-                Error err = ctx->sharedClient.addRequest((uint32_t)(stampMBCounter << 1),
-                                                         2, WRITE_HOLD_REGISTER, 6, ctx->modbusData[6]);
+                Error errorOTA = ctx->sharedClient.addRequest((uint32_t)(stampMBCounter << 1),
+                                                              2, WRITE_HOLD_REGISTER, 6, ctx->modbusData[6]);
+                Serial.printf("[INFO] WS FC06 OTA write: value=%u result=%s\n",
+                              ctx->modbusData[6], String(errorOTA));
                 stampMBCounter++;
                 oldStateOTA = ctx->modbusData[6];
             }
@@ -222,8 +228,10 @@ public:
 
             if (oldStateOTA != ctx->modbusData[6])
             {
-                Error err = ctx->sharedClient.addRequest((uint32_t)(stampMBCounter << 1),
-                                                         1, WRITE_HOLD_REGISTER, 6, ctx->modbusData[7]);
+                Error errorOTA = ctx->sharedClient.addRequest((uint32_t)(stampMBCounter << 1),
+                                                              1, WRITE_HOLD_REGISTER, 6, ctx->modbusData[6]);
+                Serial.printf("[INFO] WS FC06 OTA write: value=%u result=%s\n",
+                              ctx->modbusData[6], String(errorOTA));
                 stampMBCounter++;
                 oldStateOTA = ctx->modbusData[6];
             }
