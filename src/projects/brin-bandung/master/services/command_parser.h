@@ -38,6 +38,24 @@ public:
         Serial.printf("[ERROR] Message Invalid: %s\n", buffer);
         return EnabledOTA::INVALID;
     }
+
+    static uint32_t configCommand(uint8_t *data, size_t len)
+    {
+        char buffer[256];
+        if (len >= sizeof(buffer))
+            len = sizeof(buffer) - 1;
+        memcpy(buffer, data, len);
+        buffer[len] = '\0';
+
+        int delay_value = 0;
+        if (sscanf(buffer, "SET_DELAY=%d", &delay_value) == 1)
+        {
+            Serial.printf("[INFO] SET_DELAY Valid: %d\n", delay_value);
+            return delay_value;
+        }
+        Serial.printf("[ERROR] Message Invalid: %s\n", buffer);
+        return 0;
+    }
 };
 
 #endif // COMMAND_PARSER_H
