@@ -56,17 +56,21 @@ public:
         WebSerial.onMessage(
             [ctx](uint8_t *data, size_t len)
             {
-                EnabledOTA res = CommandParser::otaCommand(data, len);
+                EnabledOTA res = CommandParser::otaCommand(data, len, ctx->modbusDataWS);
                 if (static_cast<uint8_t>(res) != 0)
                 {
                     if (res == EnabledOTA::SLAVE_WS_ON)
-                        ctx->modbusData[6] = 1;
+                        ctx->modbusDataWS[6] = 1;
                     else if (res == EnabledOTA::SLAVE_WS_OFF)
-                        ctx->modbusData[6] = 0;
+                        ctx->modbusDataWS[6] = 0;
                     else if (res == EnabledOTA::SLAVE_ARR_ON)
-                        ctx->modbusData[7] = 1;
+                        ctx->modbusDataARR[6] = 1;
                     else if (res == EnabledOTA::SLAVE_ARR_OFF)
-                        ctx->modbusData[7] = 0;
+                        ctx->modbusDataARR[6] = 0;
+                }
+                else
+                {
+                    ctx->modbusDataWS[5] = CommandParser::configCommand(data, len);
                 }
             });
         server.begin();
