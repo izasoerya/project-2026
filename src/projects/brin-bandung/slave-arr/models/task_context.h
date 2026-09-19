@@ -7,7 +7,7 @@
 #include "../../include/transmitter/configs/wifi_module.h"
 #include "projects/brin-bandung/slave-arr/utils/enum.h"
 
-#define MAX_REGISTER 8
+#define MAX_REGISTER 16
 
 volatile uint16_t sharedModbusData[MAX_REGISTER];
 
