@@ -21,44 +21,19 @@ void setup()
 {
     Serial.begin(115200);
 
-    char hostname[64];
-    snprintf(hostname, sizeof(hostname), "slave-arr-bandung-persemaian-%d.local", DEVICE_ID + 1);
-    WiFiModule wifi(ssid, password, hostname, WIFI_POWER_19_5dBm);
-    if (wifi.begin([]() -> void
-                   { Serial.print("."); }, []() -> void
-                   { esp_restart(); }))
-        Serial.printf("Connected with IP: %s", wifi.localIP());
+    static char hostname[64];
+    snprintf(hostname, sizeof(hostname), "TFT-ARR-SLAVE-%d", DEVICE_ID + 1);
+    static WiFiModule wifi(ssid, password, hostname, WIFI_POWER_19_5dBm);
+    static contextDaemon daemonCtx(wifi);
 
-    WireGuard wg;
-    WireGuardConfig wgConfig = wgConfigs[DEVICE_ID];
-    ElegantOTA.setAutoReboot(true);
-    ElegantOTA.onEnd([](bool success)
-                     {if (success) esp_restart(); });
-
-    AsyncWebServer server(80);
-    ElegantOTA.begin(&server);
-    WebSerial.begin(&server);
-    server.begin();
-
-    if (NTPService::init())
-    {
-        // TODO: HANDLE IF NTP FAIL
-    }
-    IPAddress wgLocalIP;
-    wgLocalIP.fromString(wgConfig.slaveArr.localIp);
-    Serial.printf("wg ip: %s\n", wgLocalIP.toString());
-    bool wgOk = wg.begin(wgLocalIP, wgConfig.slaveArr.privateKey,
-                         WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
-    if (!wgOk)
-    {
-        // TODO: HANDLE IF WG FAIL
-    }
+    Application::init();
 
     static contextRainfall rainCtx(Wire);
     static contextMB mbCtx(Serial0);
-    xTaskCreate(Application::taskReadRainfall, "sampling WD task", 8192, &rainCtx, 3, &handleReadRainfall);
-    xTaskCreate(Application::taskMBSlave, "modbus slave task", 8192, &mbCtx, 2, &handleMBSlave);
-    xTaskCreate(Application::taskDaemon, "daemon", 4096, nullptr, 1, &handleDaemon);
+    xTaskCreate(Application::taskReadRainfall, "sampling WD task", 4092, &rainCtx, 3, &handleReadRainfall);
+    xTaskCreate(Application::taskMBSlave, "modbus slave task", 4092, &mbCtx, 2, &handleMBSlave);
+    xTaskCreate(Application::taskPollOta, "ota task", 4096, &daemonCtx, 2, &handleOta);
+    xTaskCreate(Application::taskDaemon, "daemon", 4096, &daemonCtx, 1, &handleDaemon);
 }
 
 void loop() { vTaskDelay(portMAX_DELAY); }
