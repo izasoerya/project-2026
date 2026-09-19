@@ -3,16 +3,19 @@
 
 #include <Stream.h>
 #include <Wire.h>
+#include <ModbusMessage.h>
 #include "../utils/utils.h"
 #include <projects/brin-bandung/slave-ws/utils/enum.h>
 
-static volatile uint16_t sharedModbusData[8];
+#define MAX_REGISTER 16
+
+static volatile uint16_t sharedModbusData[MAX_REGISTER];
 
 struct contextWD
 {
     HardwareSerial &serial;
-    const uint8_t pinRX = 4;
-    const uint8_t pinTX = 3;
+    const uint8_t pinRX = 9;
+    const uint8_t pinTX = 8;
 
     contextWD(HardwareSerial &s) : serial(s) {}
 };
@@ -40,7 +43,7 @@ struct contextMB
         request.get(2, address); // Since slave id starts at bytes 2
         request.get(4, words);   // Since length address starts at bytes 4
 
-        if (words > 0 && address + words <= 8)
+        if (words > 0 && address + words <= MAX_REGISTER)
         {
             response.add(request.getServerID(), request.getFunctionCode(), (uint8_t)(words * 2));
             for (uint16_t i = address; i < address + words; ++i)
@@ -61,7 +64,13 @@ struct contextMB
         request.get(2, addr);  // read address from request
         request.get(4, value); // read value from request
 
-        if (addr >= 8)
+        Serial.printf("[INFO] FC06 Req -> Server ID: %d, FC: %02X, Reg: %d, Value: %d\n",
+                      request.getServerID(),
+                      request.getFunctionCode(),
+                      addr,
+                      value);
+
+        if (addr >= MAX_REGISTER)
         {
             response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
             return response;
@@ -74,13 +83,40 @@ struct contextMB
 
         return response;
     }
+
+    ModbusMessage FC16(ModbusMessage request)
+    {
+        ModbusMessage response;
+        uint16_t address = 0;
+        uint16_t words = 0;
+        uint8_t byteCount = 0;
+
+        request.get(2, address);
+        request.get(4, words);
+        request.get(6, byteCount);
+
+        if (words == 0 || byteCount != words * 2 || address + words > MAX_REGISTER)
+        {
+            response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);
+            return response;
+        }
+
+        uint16_t offset = 7;
+        for (uint16_t index = 0; index < words; ++index)
+            offset = request.get(offset, modbusData[address + index]);
+
+        response.add(request.getServerID(), request.getFunctionCode());
+        response.add(address);
+        response.add(words);
+        return response;
+    }
 };
 
 struct contextTHWS
 {
     TwoWire &wire;
-    const uint8_t pinSDA = 7;
-    const uint8_t pinSCL = 8;
+    const uint8_t pinSDA = 4;
+    const uint8_t pinSCL = 3;
 
     contextTHWS(TwoWire &w) : wire(w) {}
 };
