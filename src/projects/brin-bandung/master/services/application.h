@@ -70,7 +70,7 @@ public:
                 }
                 else
                 {
-                    ctx->modbusDataWS[5] = CommandParser::configCommand(data, len);
+                    ctx->delay->delay = CommandParser::configCommand(data, len);
                 }
             });
         server.begin();
@@ -232,7 +232,7 @@ public:
             }
 
             static uint32_t lastSendTime = 0;
-            if (millis() - lastSendTime >= 60000)
+            if (millis() - lastSendTime >= ctx->delay->delay)
             {
                 lastSendTime = millis();
 
