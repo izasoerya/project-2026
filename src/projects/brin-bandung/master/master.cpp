@@ -23,12 +23,13 @@ void setup()
     static char hostname[64];
     snprintf(hostname, sizeof(hostname), "T4T-WS-Master-%d", DEVICE_ID + 1);
     static WiFiModule wifi(ssid, password, hostname, WIFI_POWER_8_5dBm);
-    static contextDaemon daemonCtx(wifi);
 
-    static contextMBWS wsCtx(Serial1);
-    static contextMBRainfall rainCtx(Serial0);
+    static sharedModbusClientContext sharedMBClient(Serial1);
+    static contextMBWS wsCtx(Serial1, sharedMBClient);
+    static contextMBRainfall rainCtx(Serial1, sharedMBClient);
     static contextDisplay displayCtx(SPI);
     static contextPublisher publisherCtx(wifi);
+    static contextDaemon daemonCtx(wifi);
 
     Application::init();
 

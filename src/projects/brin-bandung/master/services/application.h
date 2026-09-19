@@ -56,7 +56,7 @@ public:
         WebSerial.onMessage(
             [ctx](uint8_t *data, size_t len)
             {
-                EnabledOTA res = CommandParser::otaCommand(data, len, ctx->modbusDataWS);
+                EnabledOTA res = CommandParser::otaCommand(data, len);
                 if (static_cast<uint8_t>(res) != 0)
                 {
                     if (res == EnabledOTA::SLAVE_WS_ON)
@@ -122,23 +122,20 @@ public:
     static void taskReadRainfall(void *pvParam)
     {
         contextMBRainfall *ctx = static_cast<contextMBRainfall *>(pvParam);
-        ModbusClientRTU mb;
         SensorRainfallObject sensor;
         uint32_t stampMBCounter = 0;
-        uint16_t oldStateOTA = ctx->modbusData[7];
+        uint16_t oldStateOTA = ctx->modbusData[6];
 
-        RTUutils::prepareHardwareSerial(ctx->serial);
-        ctx->serial.begin(9600, SERIAL_8N1, ctx->pinRX, ctx->pinTX);
-        mb.onDataHandler([ctx](ModbusMessage response, uint32_t token)
-                         { ctx->onDataIncoming(response, token); });
-        mb.onErrorHandler([ctx](Error error, uint32_t token)
-                          { ctx->onErrorHandler(error, token); });
-        mb.setTimeout(10000);
-        mb.begin(ctx->serial);
+        ctx->sharedClient.rainfallDataHandler = [ctx](ModbusMessage response, uint32_t token)
+        { ctx->onDataIncoming(response, token); };
+        ctx->sharedClient.rainfallErrorHandler = [ctx](Error error, uint32_t token)
+        { ctx->onErrorHandler(error, token); };
+        ctx->sharedClient.mb.setTimeout(10000);
+        ctx->sharedClient.begin();
         while (1)
         {
-            Error err = mb.addRequest((uint32_t)stampMBCounter, // Token
-                                      1, READ_HOLD_REGISTER, 0, 1);
+            Error err = ctx->sharedClient.addRequest((uint32_t)(stampMBCounter << 1),
+                                                     2, READ_HOLD_REGISTER, 0, 8);
             if (err != SUCCESS)
             {
                 // TODO: HANDLE IF READ MODBUS ERROR
@@ -146,7 +143,7 @@ public:
             }
             else
             {
-                Serial.printf("[INFO] WS Modbus FC03 request queued, token: %lu\n", stampMBCounter);
+                Serial.printf("[INFO] Rain Modbus FC03 request queued, token: %lu\n", stampMBCounter);
                 stampMBCounter++;
 
                 sensor.rainfall = ctx->modbusData[4] / 10.0F;
@@ -155,11 +152,12 @@ public:
             }
             xQueueSend(queueSensorRainfall, &sensor, pdTICKS_TO_MS(10));
 
-            if (oldStateOTA != ctx->modbusData[7])
+            if (oldStateOTA != ctx->modbusData[6])
             {
-                Error err = mb.addRequest((uint32_t)stampMBCounter, // Token
-                                          1, WRITE_HOLD_REGISTER, 7, ctx->modbusData[7]);
-                oldStateOTA = ctx->modbusData[7];
+                Error err = ctx->sharedClient.addRequest((uint32_t)(stampMBCounter << 1),
+                                                         2, WRITE_HOLD_REGISTER, 6, ctx->modbusData[7]);
+                stampMBCounter++;
+                oldStateOTA = ctx->modbusData[6];
             }
 
             vTaskDelay(10000 / portTICK_PERIOD_MS);
@@ -169,24 +167,21 @@ public:
     static void taskReadWS(void *pvParam)
     {
         contextMBWS *ctx = static_cast<contextMBWS *>(pvParam);
-        ModbusClientRTU mb;
         SensorWSObject sensorWS;
         SensorRainfallObject sensorRain;
         uint32_t stampMBCounter = 0;
         uint16_t oldStateOTA = ctx->modbusData[6];
 
-        RTUutils::prepareHardwareSerial(ctx->serial);
-        ctx->serial.begin(9600, SERIAL_8N1, ctx->pinRX, ctx->pinTX);
-        mb.onDataHandler([ctx](ModbusMessage response, uint32_t token)
-                         { ctx->onDataIncoming(response, token); });
-        mb.onErrorHandler([ctx](Error error, uint32_t token)
-                          { ctx->onErrorHandler(error, token); });
-        mb.setTimeout(10000);
-        mb.begin(ctx->serial);
+        ctx->sharedClient.wsDataHandler = [ctx](ModbusMessage response, uint32_t token)
+        { ctx->onDataIncoming(response, token); };
+        ctx->sharedClient.wsErrorHandler = [ctx](Error error, uint32_t token)
+        { ctx->onErrorHandler(error, token); };
+        ctx->sharedClient.mb.setTimeout(10000);
+        ctx->sharedClient.begin();
         while (1)
         {
-            Error err = mb.addRequest((uint32_t)stampMBCounter, // Token
-                                      1, READ_HOLD_REGISTER, 0, 4);
+            Error err = ctx->sharedClient.addRequest((uint32_t)((stampMBCounter << 1) | 1),
+                                                     1, READ_HOLD_REGISTER, 0, 8);
             if (err != SUCCESS)
             {
                 // TODO: HANDLE IF READ MODBUS ERROR
@@ -206,8 +201,9 @@ public:
             }
 
             Serial.printf("[INFO] MB ADDR[6] = %d\n", ctx->modbusData[6]);
-            Error errorOTAWS = mb.addRequest((uint32_t)stampMBCounter, // Token
-                                             1, WRITE_HOLD_REGISTER, 6, ctx->modbusData[6]);
+            Error errorOTAWS = ctx->sharedClient.addRequest((uint32_t)((stampMBCounter << 1) | 1),
+                                                            1, WRITE_HOLD_REGISTER, 6, ctx->modbusData[6]);
+            stampMBCounter++;
 
             vTaskDelay(10000 / portTICK_PERIOD_MS);
         }
@@ -294,6 +290,7 @@ public:
 
             TimeStruct ts = NTPService::getTime();
             display.setClock(ts.hour, ts.minute, ts.second);
+            display.setSignalStrength(WiFi.RSSI());
             display.refresh();
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }

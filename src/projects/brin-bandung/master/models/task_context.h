@@ -3,18 +3,23 @@
 
 #include <HardwareSerial.h>
 #include <ModbusMessage.h>
+#include <ModbusClientRTU.h>
+#include <RTUutils.h>
 #include <Wire.h>
+#include <functional>
 #include "../utils/utils.h"
 #include "../utils/enum.h"
 #include "wifi_bundle.h"
 
-static volatile uint16_t sharedModbusData[8];
+static volatile uint16_t sharedModbusDataWS[8];
+static volatile uint16_t sharedModbusDataARR[8];
 
 struct contextDaemon
 {
     WiFiModule &wifi;
     FeatureStatus feature[4];
-    volatile uint16_t *modbusData = sharedModbusData;
+    volatile uint16_t *modbusDataWS = sharedModbusDataWS;
+    volatile uint16_t *modbusDataARR = sharedModbusDataARR;
 
     contextDaemon(WiFiModule &w) : wifi(w) {}
 
@@ -29,25 +34,87 @@ struct contextDaemon
     FeatureStatus getWireGuardStatus() { return feature[3]; }
 };
 
+struct sharedModbusClientContext
+{
+    const uint8_t pinRX = 20;
+    const uint8_t pinTX = 21;
+    HardwareSerial &serial;
+    ModbusClientRTU mb;
+
+    SemaphoreHandle_t _mutex;
+    bool initialized = false;
+    std::function<void(ModbusMessage, uint32_t)> wsDataHandler;
+    std::function<void(ModbusMessage, uint32_t)> rainfallDataHandler;
+    std::function<void(Error, uint32_t)> wsErrorHandler;
+    std::function<void(Error, uint32_t)> rainfallErrorHandler;
+
+    sharedModbusClientContext(HardwareSerial &s)
+        : serial(s), _mutex(xSemaphoreCreateMutex())
+    {
+        mb.onDataHandler([this](ModbusMessage response, uint32_t token)
+                         {
+                             if (response.getServerID() == 1 && wsDataHandler)
+                                 wsDataHandler(response, token);
+                             else if (response.getServerID() == 2 && rainfallDataHandler)
+                                 rainfallDataHandler(response, token); });
+        mb.onErrorHandler([this](Error error, uint32_t token)
+                          {
+                                  if ((token & 1) && wsErrorHandler)
+                                      wsErrorHandler(error, token);
+                                  else if (!(token & 1) && rainfallErrorHandler)
+                                      rainfallErrorHandler(error, token); });
+    }
+
+    bool begin()
+    {
+        xSemaphoreTake(_mutex, portMAX_DELAY);
+        if (initialized)
+        {
+            xSemaphoreGive(_mutex);
+            return true;
+        }
+
+        RTUutils::prepareHardwareSerial(serial);
+        serial.begin(9600, SERIAL_8N1, pinRX, pinTX);
+        mb.begin(serial);
+        initialized = true;
+        xSemaphoreGive(_mutex);
+        return true;
+    }
+
+    Error addRequest(uint32_t token, uint8_t serverId,
+                     uint8_t functionCode, uint16_t address, uint16_t value)
+    {
+        xSemaphoreTake(_mutex, portMAX_DELAY);
+        Error error = mb.addRequest(token, serverId, functionCode, address, value);
+        xSemaphoreGive(_mutex);
+        return error;
+    }
+};
+
 struct contextMBWS
 {
-    HardwareSerial &serial;
-    volatile uint16_t *modbusData = sharedModbusData;
-    const uint8_t pinRX = 21; // 21
-    const uint8_t pinTX = 20; // 20
+    sharedModbusClientContext &sharedClient;
+    volatile uint16_t *modbusData = sharedModbusDataWS;
     uint8_t errorTransactionModbusCounter = 0;
 
-    contextMBWS(HardwareSerial &s) : serial(s) {}
+    contextMBWS(HardwareSerial &s, sharedModbusClientContext &client)
+        : sharedClient(client) {}
 
     void onDataIncoming(ModbusMessage response, uint32_t token)
     {
         uint16_t offset = 3; // First value is on pos 3, after server ID, function code and length byte
-        offset = response.get(offset, modbusData[0]);
-        offset = response.get(offset, modbusData[1]);
-        offset = response.get(offset, modbusData[2]);
-        offset = response.get(offset, modbusData[3]);
-        offset = response.get(offset, modbusData[4]);
+
+        // ADDRESS 0 - 4 ARE FOR SENSOR DATA
+        offset = response.get(offset, modbusData[0]); // T
+        offset = response.get(offset, modbusData[1]); // H
+        offset = response.get(offset, modbusData[2]); // WS
+        offset = response.get(offset, modbusData[3]); // WD
         //  ADDRES 5 - 8 ARE FOR CONFIGURATION
+        offset = response.get(offset, modbusData[5]); // DELAY REQ
+        offset = response.get(offset, modbusData[6]); // DEBUG STATE (INET, OTA, WEBSER)
+        offset = response.get(offset, modbusData[7]); // RESTART
+
         errorTransactionModbusCounter = 0;
 
         Serial.print("[INFO] MBWS Incoming FC03: ");
@@ -65,25 +132,25 @@ struct contextMBWS
 
 struct contextMBRainfall
 {
-    HardwareSerial &serial;
-    volatile uint16_t *modbusData = sharedModbusData;
-    const uint8_t pinRX = 8;
-    const uint8_t pinTX = 9;
+    sharedModbusClientContext &sharedClient;
+    volatile uint16_t *modbusData = sharedModbusDataARR;
     uint8_t errorTransactionModbusCounter = 0;
 
-    contextMBRainfall(HardwareSerial &s) : serial(s) {}
+    contextMBRainfall(HardwareSerial &s, sharedModbusClientContext &client)
+        : sharedClient(client) {}
 
     void onDataIncoming(ModbusMessage response, uint32_t token)
     {
         uint16_t offset = 3; // First value is on pos 3, after server ID, function code and length byte
-        offset = response.get(offset, modbusData[0]);
-        offset = response.get(offset, modbusData[1]);
-        offset = response.get(offset, modbusData[2]);
-        offset = response.get(offset, modbusData[3]);
-        offset = response.get(offset, modbusData[4]);
-        offset = response.get(offset, modbusData[5]);
-        offset = response.get(offset, modbusData[6]);
-        offset = response.get(offset, modbusData[7]);
+
+        // ADDRESS 0 - 4 ARE FOR SENSOR DATA
+        offset = response.get(offset, modbusData[0]); // Rain in mm
+        offset = response.get(offset, modbusData[1]); // Rain in tipping count
+
+        //  ADDRES 5 - 8 ARE FOR CONFIGURATION
+        offset = response.get(offset, modbusData[5]); // DELAY REQ
+        offset = response.get(offset, modbusData[6]); // DEBUG STATE (INET, OTA, WEBSER)
+        offset = response.get(offset, modbusData[7]); // RESTARTs
         errorTransactionModbusCounter = 0;
 
         Serial.print("[INFO] MBRain Incoming FC03: ");
@@ -112,9 +179,9 @@ struct contextPublisher
 struct contextDisplay
 {
     SPIClass &spi;
-    const uint8_t pinSCK = 1;
+    const uint8_t pinSCK = 9;
     const uint8_t pinMISO = 10;
-    const uint8_t pinMOSI = 0;
+    const uint8_t pinMOSI = 8;
     const uint8_t pinCS = 5;
 
     contextDisplay(SPIClass &s) : spi(s) {}
