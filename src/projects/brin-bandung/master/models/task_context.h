@@ -75,6 +75,18 @@ struct sharedModbusClientContext
         xSemaphoreGive(_mutex);
         return error;
     }
+
+    Error addRequests(uint32_t token, uint8_t serverId,
+                      uint8_t functionCode, uint16_t address,
+                      uint16_t wordCount, uint8_t byteCount,
+                      uint16_t *data)
+    {
+        xSemaphoreTake(_mutex, portMAX_DELAY);
+        Error error = mb.addRequest(token, serverId, functionCode,
+                                    address, wordCount, byteCount, data);
+        xSemaphoreGive(_mutex);
+        return error;
+    }
 };
 
 static sharedDelayContext *contextSharedDelay;
