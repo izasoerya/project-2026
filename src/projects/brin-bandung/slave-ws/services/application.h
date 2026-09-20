@@ -50,15 +50,15 @@ public:
         if (NTPService::init())
             ctx->setNTPStatus(FeatureStatus::WORKING);
 
-        // WireGuard wg;
-        // WireGuardConfig wgConfig = wgConfigs[0]; // TODO: CHANGE BASED ON SETUP
-        // IPAddress wgLocalIP;
-        // wgLocalIP.fromString(wgConfig.master.localIp);
-        // Serial.printf("wg ip: %s\n", wgLocalIP.toString());
-        // bool wgOk = wg.begin(wgLocalIP, wgConfig.master.privateKey,
-        //                      WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
-        // if (!wgOk)
-        //     ctx->setWireGuardStatus(FeatureStatus::WIREGUARD);
+        WireGuard wg;
+        WireGuardConfig wgConfig = wgConfigs[0]; // TODO: CHANGE BASED ON SETUP
+        IPAddress wgLocalIP;
+        wgLocalIP.fromString(wgConfig.slave.localIp);
+        Serial.printf("wg ip: %s\n", wgLocalIP.toString());
+        bool wgOk = wg.begin(wgLocalIP, wgConfig.slave.privateKey,
+                             WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
+        if (!wgOk)
+            ctx->setWireGuardStatus(FeatureStatus::WIREGUARD);
 
         AsyncWebServer server(80);
         ElegantOTA.begin(&server);
@@ -145,16 +145,29 @@ public:
     static void taskReadWD(void *pvParam)
     {
         contextWD *wdCtx = static_cast<contextWD *>(pvParam);
+
         wdCtx->serial.begin(9600, SERIAL_8N1, wdCtx->pinRX, wdCtx->pinTX);
+        wdCtx->serial.setTimeout(1500);
         while (1)
         {
-            String data = wdCtx->serial.readString(); // data yang diterima dari sensor berawalan tanda * dan diakhiri tanda #, contoh *1#
-            int a = data.indexOf("*");                // a adalah index tanda *
-            int b = data.indexOf("#");                // b adalah index tanda #
-            String resultWind = data.substring(a + 1, b);
-            windDirection = Parser::parseStringWindDirection(resultWind);
+            String data = wdCtx->serial.readStringUntil('#'); // data sensor berawalan * dan diakhiri #, contoh *1#
+            if (data.length() > 0)
+                data += '#';
 
-            vTaskDelay(5000 / portTICK_PERIOD_MS);
+            int a = data.indexOf("*"); // a adalah index tanda *
+            int b = data.indexOf("#"); // b adalah index tanda #
+            if (a >= 0 && b > a + 1)
+            {
+                String resultWind = data.substring(a + 1, b);
+                if (resultWind.length() == 1 && resultWind[0] >= '1' && resultWind[0] <= '8')
+                    windDirection = Parser::parseStringWindDirection(resultWind);
+                else
+                    Serial.printf("[ERROR] Invalid wind direction value: %s\n", resultWind);
+            }
+            else if (data.length() > 0)
+                Serial.println("[ERROR] Invalid wind direction frame");
+
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
     }
 
@@ -163,7 +176,6 @@ public:
         contextTHWS *wd = static_cast<contextTHWS *>(pvParam);
         TrimmedMovingAverage filteredTemperature(20, 4);
         TrimmedMovingAverage filteredHumidity(20, 4);
-        TrimmedMovingAverage filteredAnemoter(20, 4);
 
         ClosedCube_SHT31D sht;
         Wire.begin(wd->pinSDA, wd->pinSCL);
@@ -171,14 +183,12 @@ public:
         if (sht.periodicStart(SHT3XD_REPEATABILITY_HIGH, SHT3XD_FREQUENCY_10HZ) != SHT3XD_NO_ERROR)
             Serial.println("SHT INIT FAILED");
 
-        const uint8_t pinAnemo = 9;
+        const uint8_t pinAnemo = 0;
         pinMode(pinAnemo, INPUT_PULLUP);
         gpio_install_isr_service(ESP_INTR_FLAG_LEVEL1);
         detachInterrupt(pinAnemo);
         attachInterrupt(digitalPinToInterrupt(pinAnemo), Application::anemoInterruptHandler, FALLING);
         uint32_t windSpeed;
-
-        WindDirectionEnum windDirection;
 
         while (1)
         {
@@ -193,11 +203,14 @@ public:
             SensorObject snapshot = SensorObject{
                 .temperature = filteredTemperature.filter(shtResult.t),
                 .humidity = filteredHumidity.filter(shtResult.rh),
-                .windSpeed = filteredAnemoter.filter(windSpeedResult),
+                .windSpeed = windSpeedResult,
                 .windDirection = windDirection,
             };
             if (singletonSensor.update(snapshot))
+            {
+                Serial.printf("[INFO] Sensor to Queue: %s", snapshot.toString());
                 xQueueSend(queueSensorDatastore, &snapshot, pdMS_TO_TICKS(10));
+            }
             else
                 Serial.println("Failed to send sensor datastore to queue");
 
@@ -224,10 +237,11 @@ public:
         {
             if (xQueueReceive(queueSensorDatastore, &payload, 0) == pdPASS)
             {
-                mbCtx->modbusData[0] = uint16_t(10);
+                mbCtx->modbusData[0] = uint16_t(payload.temperature * 10);
                 mbCtx->modbusData[1] = uint16_t(payload.humidity * 10);
                 mbCtx->modbusData[2] = uint16_t(payload.windSpeed * 10);
                 mbCtx->modbusData[3] = uint16_t(payload.windDirection);
+                mbCtx->modbusData[4] = uint16_t(temperatureRead() * 10);
             }
 
             vTaskDelay(2000 / portTICK_PERIOD_MS);
