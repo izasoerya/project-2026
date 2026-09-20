@@ -9,6 +9,13 @@
 struct SensorRainfallObject
 {
     float rainfall;
+
+    const char *toString() const
+    {
+        static char buffer[32];
+        snprintf(buffer, sizeof(buffer), "Rainfall: %.1f", rainfall);
+        return buffer;
+    }
 };
 
 struct SensorWSObject
@@ -17,6 +24,16 @@ struct SensorWSObject
     float humidity;
     float windSpeed;
     WindDirectionEnum windDirection;
+
+    const char *toString() const
+    {
+        static char buffer[80];
+        snprintf(buffer, sizeof(buffer),
+                 "T: %.1f | H: %.1f | WS: %.1f | WD: %s",
+                 temperature, humidity, windSpeed,
+                 Parser::parseWindDirection(windDirection));
+        return buffer;
+    }
 };
 
 struct SensorPublishableObject
@@ -26,6 +43,16 @@ struct SensorPublishableObject
     float windSpeed;
     WindDirectionEnum windDirection;
     float rainfall;
+
+    const char *toString() const
+    {
+        static char buffer[100];
+        snprintf(buffer, sizeof(buffer),
+                 "T: %.1f | H: %.1f | WS: %.1f | WD: %s | Rain: %.1f",
+                 temperature, humidity, windSpeed,
+                 Parser::parseWindDirection(windDirection), rainfall);
+        return buffer;
+    }
 
     size_t toJson(char *out, size_t outSize) const
     {
