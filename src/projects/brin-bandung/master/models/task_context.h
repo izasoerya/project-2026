@@ -16,7 +16,7 @@ static volatile uint16_t sharedModbusDataARR[16];
 
 struct sharedDelayContext
 {
-    uint32_t delay = 10000;
+    uint32_t delay = 60000;
 };
 
 struct sharedModbusClientContext
