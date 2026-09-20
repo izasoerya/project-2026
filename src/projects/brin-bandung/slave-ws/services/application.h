@@ -98,10 +98,6 @@ public:
 
         while (1)
         {
-            if (ctx->modbusData[5] == 1)
-                ctx->enabledFeature[0] = Feature::INTERNET_FEAUTRE;
-            else if (ctx->modbusData[5] == 0)
-                ctx->enabledFeature[0] = Feature::FEATURE_DISABLED;
             if (ctx->modbusData[6] == 1)
                 ctx->enabledFeature[1] = Feature::OTA_FEATURE;
             else if (ctx->modbusData[6] == 0)
@@ -126,20 +122,6 @@ public:
                 TimeStruct ts = NTPService::getTime();
                 Serial.printf("Clock: %d:%d:%d\n", ts.hour, ts.minute, ts.second);
             }
-
-            if (ctx->enabledFeature[0] == Feature::INTERNET_FEAUTRE)
-                if (WiFi.status() != WL_CONNECTED)
-                {
-                    static uint32_t prevConnect = 0;
-                    if (millis() - prevConnect > 15000) // Timeout on 15 second
-                    {
-                        prevConnect = millis();
-                        ctx->wifi.begin([]() {}, []() {});
-                    }
-                    ctx->setInternetStatus(FeatureStatus::INTERNET);
-                }
-                else if (WiFi.status() == WL_CONNECTED)
-                    ctx->setInternetStatus(FeatureStatus::WORKING);
 
             if (ctx->enabledFeature[1] == Feature::OTA_FEATURE)
                 vTaskResume(handleOta);
@@ -187,9 +169,7 @@ public:
         Wire.begin(wd->pinSDA, wd->pinSCL);
         sht.begin(0x44); // I2C address can be 0x44 or 0x45
         if (sht.periodicStart(SHT3XD_REPEATABILITY_HIGH, SHT3XD_FREQUENCY_10HZ) != SHT3XD_NO_ERROR)
-        {
-            // TODO: HANDLING WHEN SHT FAILING
-        }
+            Serial.println("SHT INIT FAILED");
 
         const uint8_t pinAnemo = 9;
         pinMode(pinAnemo, INPUT_PULLUP);
@@ -217,15 +197,9 @@ public:
                 .windDirection = windDirection,
             };
             if (singletonSensor.update(snapshot))
-            {
                 xQueueSend(queueSensorDatastore, &snapshot, pdMS_TO_TICKS(10));
-                Serial.printf("[INFO] Push sensor to queue: %s", snapshot.toString());
-            }
             else
-            {
                 Serial.println("Failed to send sensor datastore to queue");
-                // TODO: HANDLING WHEN PUSH QUEUE FAILING
-            }
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
@@ -250,7 +224,6 @@ public:
         {
             if (xQueueReceive(queueSensorDatastore, &payload, 0) == pdPASS)
             {
-                Serial.printf("[INFO] Receive sensor queue: %s", payload.toString());
                 mbCtx->modbusData[0] = uint16_t(10);
                 mbCtx->modbusData[1] = uint16_t(payload.humidity * 10);
                 mbCtx->modbusData[2] = uint16_t(payload.windSpeed * 10);
