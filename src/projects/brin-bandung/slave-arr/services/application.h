@@ -42,15 +42,15 @@ public:
         if (NTPService::init())
             ctx->setNTPStatus(FeatureStatus::WORKING);
 
-        // WireGuard wg;
-        // WireGuardConfig wgConfig = wgConfigs[0]; // TODO: CHANGE BASED ON SETUP
-        // IPAddress wgLocalIP;
-        // wgLocalIP.fromString(wgConfig.master.localIp);
-        // Serial.printf("wg ip: %s\n", wgLocalIP.toString());
-        // bool wgOk = wg.begin(wgLocalIP, wgConfig.master.privateKey,
-        //                      WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
-        // if (!wgOk)
-        //     ctx->setWireGuardStatus(FeatureStatus::WIREGUARD);
+        WireGuard wg;
+        WireGuardConfig wgConfig = wgConfigs[0]; // TODO: CHANGE BASED ON SETUP
+        IPAddress wgLocalIP;
+        wgLocalIP.fromString(wgConfig.slaveArr.localIp);
+        Serial.printf("wg ip: %s\n", wgLocalIP.toString());
+        bool wgOk = wg.begin(wgLocalIP, wgConfig.slaveArr.privateKey,
+                             WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
+        if (!wgOk)
+            ctx->setWireGuardStatus(FeatureStatus::WIREGUARD);
 
         AsyncWebServer server(80);
         ElegantOTA.begin(&server);
@@ -170,7 +170,7 @@ public:
 
         while (1)
         {
-            float rain = rainSensor.getRainfall(24);
+            float rain = rainSensor.getRainfall();
             SensorObject snapshot = SensorObject{
                 .rainfall = rain,
             };
@@ -186,15 +186,15 @@ public:
             else
                 Serial.println("Failed to update sensor datastore");
 
-            // TimeStruct ts = NTPService::getTime();
-            // if (ts.hour == 0 && ts.minute == 0 && !resetDoneToday)
-            // {
-            //     rainSensor.setRainAccumulatedValue(0);
-            //     NVSManager::storeRainfall(0.0F);
-            //     resetDoneToday = true;
-            // }
-            // else if (ts.hour != 0 || ts.minute != 0)
-            //     resetDoneToday = false;
+            TimeStruct ts = NTPService::getTime();
+            if (ts.hour == 0 && ts.minute == 0 && !resetDoneToday)
+            {
+                rainSensor.setRainAccumulatedValue(0);
+                NVSManager::storeRainfall(0.0F);
+                resetDoneToday = true;
+            }
+            else if (ts.hour != 0 || ts.minute != 0)
+                resetDoneToday = false;
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
