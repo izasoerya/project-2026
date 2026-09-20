@@ -90,10 +90,37 @@ public:
             });
         server.begin();
 
+        while (ctx->getNTPStatus() == FeatureStatus::NTP)
+            vTaskDelay(500 / portTICK_PERIOD_MS);
+        WireGuard wg;
+        WireGuardConfig wgConfig = wgConfigsTesting[0]; // TODO: CHANGE BASED ON SETUP
+        IPAddress wgLocalIP;
+        wgLocalIP.fromString(wgConfig.master.localIp);
+        Serial.printf("wg ip: %s\n", wgLocalIP.toString());
+        bool wgOk = wg.begin(wgLocalIP, wgConfig.master.privateKey,
+                             WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
+        if (!wgOk)
+            ctx->setWireGuardStatus(FeatureStatus::WIREGUARD);
+
+        static uint16_t counter = 0;
         while (1)
         {
             ElegantOTA.loop();
             WebSerial.loop();
+
+            if (WiFi.status() != WL_CONNECTED)
+            {
+                counter++;
+                if (counter > 1000)
+                {
+                    counter = 0;
+                    Serial.printf("Reconnecting...\n");
+                    ctx->wifi.disconnect();
+                    ctx->wifi.beginNB();
+                }
+            }
+            else
+                counter = 0;
 
             vTaskDelay(20 / portTICK_PERIOD_MS);
         }
@@ -120,16 +147,13 @@ public:
             else
                 prevCheckNTP = millis();
 
-            if (WiFi.status() != WL_CONNECTED)
-                if (millis() - prevReconnect > 20000)
-                {
-                    prevReconnect = millis();
-
-                    Serial.printf("Reconnecting...\n");
-                    ctx->wifi.disconnect();
-                    ctx->wifi.beginNB();
-                }
-
+            Serial.printf("ARR: %u | MB: %u | DISPLAY: %u | DAEMON: %u | SUPA: %u | OTA: %u\n",
+                          uxTaskGetStackHighWaterMark(handleReadRainfall),
+                          uxTaskGetStackHighWaterMark(handleMBSlave),
+                          uxTaskGetStackHighWaterMark(handleDisplay),
+                          uxTaskGetStackHighWaterMark(handleDaemon),
+                          uxTaskGetStackHighWaterMark(handlePublish),
+                          uxTaskGetStackHighWaterMark(handleOta));
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
     }
@@ -165,7 +189,6 @@ public:
 
                 xQueueSend(queueSensorRainfall, &sensor, pdTICKS_TO_MS(10));
             }
-            xQueueSend(queueSensorRainfall, &sensor, pdTICKS_TO_MS(10));
 
             if (oldStateOTA != ctx->modbusData[6])
             {
