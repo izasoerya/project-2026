@@ -9,8 +9,8 @@ public:
     {
         Preferences prefs;
         prefs.begin("app_config", false);
-        prefs.putFloat("rainfall_counter", val);
-        float counter = prefs.getFloat("rainfall_counter", -1);
+        prefs.putFloat("rain_counter", val);
+        float counter = prefs.getFloat("rain_counter", -1);
         prefs.end();
         if (val == counter)
             return true;
@@ -21,7 +21,7 @@ public:
     {
         Preferences prefs;
         prefs.begin("app_config", true);
-        float counter = prefs.getFloat("rainfall_counter", -1);
+        float counter = prefs.getFloat("rain_counter", -1);
         return counter;
     }
 };
