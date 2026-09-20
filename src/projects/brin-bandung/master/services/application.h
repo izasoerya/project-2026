@@ -8,8 +8,10 @@
 #include <display/display_tft_spi_lcd/display_tft.h>
 #include "../../include/sensor/filters/moving_average.h"
 #include "../../include/transmitter/configs/wifi_module.h"
-#include "../models/task_context.h"
 #include "../datastore/sensor_datastore.h"
+extern QueueHandle_t queueSensorRainfall;
+extern QueueHandle_t queueSensorWS;
+#include "../models/task_context.h"
 #include "../utils/parser.h"
 #include "../services/command_parser.h"
 #include <projects/brin-bandung/slave-arr/utils/modbus_utility.h>
@@ -96,7 +98,8 @@ public:
         WireGuardConfig wgConfig = wgConfigsTesting[0]; // TODO: CHANGE BASED ON SETUP
         IPAddress wgLocalIP;
         wgLocalIP.fromString(wgConfig.master.localIp);
-        Serial.printf("wg ip: %s\n", wgLocalIP.toString());
+        String wgIp = wgLocalIP.toString();
+        Serial.printf("wg ip: %s\n", wgIp.c_str());
         bool wgOk = wg.begin(wgLocalIP, wgConfig.master.privateKey,
                              WG_SERVER_PUBLIC_IP, WG_SERVER_PUBLIC_KEY, WG_ENDPOINT_PORT);
         if (!wgOk)
@@ -161,7 +164,6 @@ public:
     static void taskReadRainfall(void *pvParam)
     {
         contextMBRainfall *ctx = static_cast<contextMBRainfall *>(pvParam);
-        SensorRainfallObject sensor;
         uint32_t stampMBCounter = 0;
         uint16_t oldStateOTA = ctx->modbusData[6];
 
@@ -178,24 +180,22 @@ public:
             if (err != SUCCESS)
             {
                 // TODO: HANDLE IF READ MODBUS ERROR
-                Serial.printf("[ERROR] Rain Modbus request: %s\n", String(err));
+                String errorText = String(err);
+                Serial.printf("[ERROR] Rain Modbus request: %s\n", errorText.c_str());
             }
             else
             {
                 Serial.printf("[INFO] Rain Modbus FC03 request queued, token: %lu\n", stampMBCounter);
                 stampMBCounter++;
-
-                sensor.rainfall = ctx->modbusData[0] / 10.0F;
-
-                xQueueSend(queueSensorRainfall, &sensor, pdTICKS_TO_MS(10));
             }
 
             if (oldStateOTA != ctx->modbusData[6])
             {
                 Error errorOTA = ctx->sharedClient.addRequest((uint32_t)(stampMBCounter << 1),
                                                               2, WRITE_HOLD_REGISTER, 6, ctx->modbusData[6]);
-                Serial.printf("[INFO] WS FC06 OTA write: value=%u result=%s\n",
-                              ctx->modbusData[6], String(errorOTA));
+                String errorText = String(errorOTA);
+                Serial.printf("[INFO] Rain FC06 OTA write: value=%u result=%s\n",
+                              ctx->modbusData[6], errorText.c_str());
                 stampMBCounter++;
                 oldStateOTA = ctx->modbusData[6];
             }
@@ -216,8 +216,6 @@ public:
     static void taskReadWS(void *pvParam)
     {
         contextMBWS *ctx = static_cast<contextMBWS *>(pvParam);
-        SensorWSObject sensorWS;
-        SensorRainfallObject sensorRain;
         uint32_t stampMBCounter = 0;
         uint16_t oldStateOTA = ctx->modbusData[6];
 
@@ -234,27 +232,22 @@ public:
             if (err != SUCCESS)
             {
                 // TODO: HANDLE IF READ MODBUS ERROR
-                Serial.printf("[ERROR] WS Modbus request: %s\n", String(err));
+                String errorText = String(err);
+                Serial.printf("[ERROR] WS Modbus request: %s\n", errorText.c_str());
             }
             else
             {
                 Serial.printf("[INFO] WS Modbus FC03 request queued, token: %lu\n", stampMBCounter);
                 stampMBCounter++;
-
-                sensorWS.temperature = ctx->modbusData[0] / 10.0F;
-                sensorWS.humidity = ctx->modbusData[1] / 10.0F;
-                sensorWS.windSpeed = ctx->modbusData[2] / 10.0F;
-                sensorWS.windDirection = static_cast<WindDirectionEnum>(ctx->modbusData[3]);
-
-                xQueueSend(queueSensorWS, &sensorWS, pdTICKS_TO_MS(10));
             }
 
             if (oldStateOTA != ctx->modbusData[6])
             {
                 Error errorOTA = ctx->sharedClient.addRequest((uint32_t)(stampMBCounter << 1),
                                                               1, WRITE_HOLD_REGISTER, 6, ctx->modbusData[6]);
+                String errorText = String(errorOTA);
                 Serial.printf("[INFO] WS FC06 OTA write: value=%u result=%s\n",
-                              ctx->modbusData[6], String(errorOTA));
+                              ctx->modbusData[6], errorText.c_str());
                 stampMBCounter++;
                 oldStateOTA = ctx->modbusData[6];
             }
@@ -277,19 +270,32 @@ public:
         contextPublisher *ctx = static_cast<contextPublisher *>(pvParam);
         static SensorWSObject ws;
         static SensorRainfallObject rain;
-        static SensorPublishableObject sensor;
+        static SensorPublishableObject sensor{};
 
         while (1)
         {
-            if (xQueueReceive(queueSensorRainfall, &rain, pdTICKS_TO_MS(0)) == pdPASS ||
-                xQueueReceive(queueSensorWS, &ws, pdTICKS_TO_MS(0)) == pdPASS)
+            bool sensorUpdated = false;
+
+            if (xQueueReceive(queueSensorWS, &ws, pdMS_TO_TICKS(0)) == pdPASS)
             {
                 sensor.temperature = ws.temperature;
                 sensor.humidity = ws.humidity;
-                sensor.windSpeed = ws.windSpeed;
+                if (sensor.windSpeed < 1.5)
+                    sensor.windSpeed = 0;
+                else
+                    sensor.windSpeed = ws.windSpeed;
                 sensor.windDirection = ws.windDirection;
-                sensor.rainfall = rain.rainfall;
+                sensorUpdated = true;
+            }
 
+            if (xQueueReceive(queueSensorRainfall, &rain, pdMS_TO_TICKS(0)) == pdPASS)
+            {
+                sensor.rainfall = rain.rainfall;
+                sensorUpdated = true;
+            }
+
+            if (sensorUpdated)
+            {
                 if (singletonSensorFull.update(sensor))
                     xQueueSend(queueSensorDashboard, &sensor, pdMS_TO_TICKS(10));
             }

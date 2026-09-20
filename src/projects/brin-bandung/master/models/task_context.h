@@ -102,6 +102,13 @@ struct contextMBWS
 
     void onDataIncoming(ModbusMessage response, uint32_t token)
     {
+        if (response.getFunctionCode() != READ_HOLD_REGISTER)
+        {
+            Serial.printf("[INFO] MBWS response ignored, FC: %02X\n",
+                          response.getFunctionCode());
+            return;
+        }
+
         uint16_t offset = 3; // First value is on pos 3, after server ID, function code and length byte
 
         // ADDRESS 0 - 4 ARE FOR SENSOR DATA
@@ -115,6 +122,15 @@ struct contextMBWS
         offset = response.get(offset, modbusData[7]); // RESTART
 
         errorTransactionModbusCounter = 0;
+
+        SensorWSObject sensorWS{
+            .temperature = modbusData[0] / 10.0F,
+            .humidity = modbusData[1] / 10.0F,
+            .windSpeed = modbusData[2] / 10.0F,
+            .windDirection = static_cast<WindDirectionEnum>(modbusData[3]),
+        };
+        Serial.println(sensorWS.toString());
+        xQueueSend(queueSensorWS, &sensorWS, pdMS_TO_TICKS(10));
 
         Serial.print("[INFO] MBWS Incoming FC03: ");
         for (size_t i = 0; i < response.size(); i++)
@@ -140,6 +156,13 @@ struct contextMBRainfall
 
     void onDataIncoming(ModbusMessage response, uint32_t token)
     {
+        if (response.getFunctionCode() != READ_HOLD_REGISTER)
+        {
+            Serial.printf("[INFO] MBRain response ignored, FC: %02X\n",
+                          response.getFunctionCode());
+            return;
+        }
+
         uint16_t offset = 3; // First value is on pos 3, after server ID, function code and length byte
 
         // ADDRESS 0 - 4 ARE FOR SENSOR DATA
@@ -151,6 +174,11 @@ struct contextMBRainfall
         offset = response.get(offset, modbusData[6]); // DEBUG STATE (INET, OTA, WEBSER)
         offset = response.get(offset, modbusData[7]); // RESTARTs
         errorTransactionModbusCounter = 0;
+
+        SensorRainfallObject sensorRainfall{
+            .rainfall = modbusData[0] / 10.0F,
+        };
+        xQueueSend(queueSensorRainfall, &sensorRainfall, pdMS_TO_TICKS(10));
 
         Serial.print("[INFO] MBRain Incoming FC03: ");
         for (size_t i = 0; i < response.size(); i++)
