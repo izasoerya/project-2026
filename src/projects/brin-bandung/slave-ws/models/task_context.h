@@ -115,8 +115,8 @@ struct contextMB
 struct contextTHWS
 {
     TwoWire &wire;
-    const uint8_t pinSDA = 4;
-    const uint8_t pinSCL = 3;
+    const uint8_t pinSDA = 6;
+    const uint8_t pinSCL = 7;
 
     contextTHWS(TwoWire &w) : wire(w) {}
 };
