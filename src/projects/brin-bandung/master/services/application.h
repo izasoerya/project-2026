@@ -269,12 +269,27 @@ public:
         }
     }
 
+    struct SensorDatapoint
+    {
+        float temperature = 0;
+        float humidity = 0;
+        float windSpeed = 0;
+        float rainfall = 0;
+    };
+
     static void taskSendSupabase(void *pvParam)
     {
         contextPublisher *ctx = static_cast<contextPublisher *>(pvParam);
         static SensorWSObject ws;
         static SensorRainfallObject rain;
         static SensorPublishableObject sensor{};
+
+        static constexpr uint8_t MAX_DATAPOINTS = 30;
+        static SensorDatapoint dataBuffer[MAX_DATAPOINTS] = {};
+        static uint8_t bufferIndex = 0;
+        static uint8_t pointsCollected = 0;
+        static uint32_t lastStoreTime = 0;
+        static uint32_t lastSendTime = 0;
 
         while (1)
         {
@@ -304,21 +319,53 @@ public:
                     xQueueSend(queueSensorDashboard, &sensor, pdMS_TO_TICKS(10));
             }
 
-            static uint32_t lastSendTime = 0;
-            if (millis() - lastSendTime >= ctx->delay->delay)
+            if (millis() - lastStoreTime >= 30000)
             {
-                lastSendTime = millis();
+                lastStoreTime = millis();
+                dataBuffer[bufferIndex].temperature = sensor.temperature;
+                dataBuffer[bufferIndex].humidity = sensor.humidity;
+                dataBuffer[bufferIndex].windSpeed = sensor.windSpeed;
+                dataBuffer[bufferIndex].rainfall = sensor.rainfall;
+                bufferIndex = (bufferIndex + 1) % MAX_DATAPOINTS;
 
-                ctx->wifi.setTransport(&ctx->transport);
-                char buffer[256];
-                sensor.toJson(buffer, sizeof(buffer));
-                int16_t response = ctx->wifi.send(ctx->tableSensor, buffer);
-
-                Serial.printf("[INFO] POST Supa: %d\n", response);
-                WebSerial.printf("[INFO] POST Supa: %d\n", response);
+                if (pointsCollected < MAX_DATAPOINTS)
+                    pointsCollected++;
             }
 
-            vTaskDelay(1000 / portTICK_PERIOD_MS); // Loop every 1 second
+            if (millis() - lastSendTime >= ctx->delay->delay && pointsCollected > 0)
+            {
+                lastSendTime = millis();
+                float avgTemp = 0, avgHumidity = 0, avgWindSpeed = 0, sumRainfall = 0;
+                for (uint8_t i = 0; i < pointsCollected; i++)
+                {
+                    avgTemp += dataBuffer[i].temperature;
+                    avgHumidity += dataBuffer[i].humidity;
+                    avgWindSpeed += dataBuffer[i].windSpeed;
+                    sumRainfall += dataBuffer[i].rainfall;
+                }
+                avgTemp /= pointsCollected;
+                avgHumidity /= pointsCollected;
+                avgWindSpeed /= pointsCollected;
+
+                sensor.temperature = avgTemp;
+                sensor.humidity = avgHumidity;
+                sensor.windSpeed = avgWindSpeed;
+                sensor.rainfall = sumRainfall;
+
+                ctx->wifi.setTransport(&ctx->transport);
+                char jsonBuffer[256];
+                sensor.toJson(jsonBuffer, sizeof(jsonBuffer));
+                int16_t response = ctx->wifi.send(ctx->tableSensor, jsonBuffer);
+
+                Serial.printf("[INFO] POST Supa (avg of %u): %d\n", pointsCollected, response);
+                WebSerial.printf("[INFO] POST Supa (avg of %u): %d\n", pointsCollected, response);
+
+                memset(dataBuffer, 0, sizeof(dataBuffer));
+                bufferIndex = 0;
+                pointsCollected = 0;
+            }
+
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
     }
 
