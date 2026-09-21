@@ -308,7 +308,7 @@ public:
                 ctx->wifi.setTransport(&ctx->transport);
                 char buffer[256];
                 sensor.toJson(buffer, sizeof(buffer));
-                int16_t response = ctx->wifi.send("%5BWS-DEV%5D%20sensors", buffer);
+                int16_t response = ctx->wifi.send(ctx->tableSensor, buffer);
 
                 Serial.printf("[INFO] POST Supa: %d\n", response);
             }

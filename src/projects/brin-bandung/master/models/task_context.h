@@ -196,8 +196,10 @@ struct contextMBRainfall
 struct contextPublisher
 {
     WiFiModule &wifi;
-    const char *supabaseUrl = "https://gothabjdasaphwzrjnto.supabase.co";
-    const char *supabasePublicKey = "sb_publishable_Dx3vXSh8qdQhM1Zi_V1MTQ_ifqdbX1o";
+    const char *supabaseUrl = "https://pykernnkhvnssplhzcvn.supabase.co";
+    const char *supabasePublicKey = "sb_publishable_coDPUa845ZtfYmoBWlZlgw_eH5vsCY7";
+    const char *tableSensor = "sensors";
+    const char *tableSystemLlogs = "system_logs";
     SupabaseTransport transport = SupabaseTransport(supabaseUrl, supabasePublicKey);
     sharedDelayContext *delay = &contextSharedDelay;
 
