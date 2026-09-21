@@ -95,7 +95,7 @@ public:
         while (ctx->getNTPStatus() == FeatureStatus::NTP)
             vTaskDelay(500 / portTICK_PERIOD_MS);
         WireGuard wg;
-        WireGuardConfig wgConfig = wgConfigsTesting[0]; // TODO: CHANGE BASED ON SETUP
+        WireGuardConfig wgConfig = wgConfigs[0]; // TODO: CHANGE BASED ON SETUP
         IPAddress wgLocalIP;
         wgLocalIP.fromString(wgConfig.master.localIp);
         String wgIp = wgLocalIP.toString();
