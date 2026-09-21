@@ -196,6 +196,8 @@ public:
                 String errorText = String(errorOTA);
                 Serial.printf("[INFO] Rain FC06 OTA write: value=%u result=%s\n",
                               ctx->modbusData[6], errorText.c_str());
+                WebSerial.printf("[INFO] Rain FC06 OTA write: value=%u result=%s\n",
+                                 ctx->modbusData[6], errorText.c_str());
                 stampMBCounter++;
                 oldStateOTA = ctx->modbusData[6];
             }
@@ -248,6 +250,8 @@ public:
                 String errorText = String(errorOTA);
                 Serial.printf("[INFO] WS FC06 OTA write: value=%u result=%s\n",
                               ctx->modbusData[6], errorText.c_str());
+                WebSerial.printf("[INFO] WS FC06 OTA write: value=%u result=%s\n",
+                                 ctx->modbusData[6], errorText.c_str());
                 stampMBCounter++;
                 oldStateOTA = ctx->modbusData[6];
             }
@@ -311,6 +315,7 @@ public:
                 int16_t response = ctx->wifi.send(ctx->tableSensor, buffer);
 
                 Serial.printf("[INFO] POST Supa: %d\n", response);
+                WebSerial.printf("[INFO] POST Supa: %d\n", response);
             }
 
             vTaskDelay(1000 / portTICK_PERIOD_MS); // Loop every 1 second

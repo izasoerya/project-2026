@@ -131,12 +131,14 @@ struct contextMBWS
             .windDirection = static_cast<WindDirectionEnum>(modbusData[3]),
         };
         Serial.printf("[INFO] FC03 MBWS Sensor: %s | IC Temp: %.1f\n", sensorWS.toString(), modbusData[4] / 10.0F);
+        WebSerial.printf("[INFO] FC03 MBWS Sensor: %s | IC Temp: %.1f\n", sensorWS.toString(), modbusData[4] / 10.0F);
         xQueueSend(queueSensorWS, &sensorWS, pdMS_TO_TICKS(10));
     }
 
     void onErrorHandler(Error error, uint32_t token)
     {
         Serial.printf("[ERROR] MBWS modbus receive: %s | %d\n", String(error), errorTransactionModbusCounter);
+        WebSerial.printf("[ERROR] MBWS modbus receive: %s | %d\n", String(error), errorTransactionModbusCounter);
         errorTransactionModbusCounter++;
     }
 };
@@ -175,11 +177,13 @@ struct contextMBRainfall
         };
         xQueueSend(queueSensorRainfall, &sensorRainfall, pdMS_TO_TICKS(10));
         Serial.printf("[INFO] FC03 ARR Sensor: %s\n", sensorRainfall.toString());
+        WebSerial.printf("[INFO] FC03 ARR Sensor: %s\n", sensorRainfall.toString());
     }
 
     void onErrorHandler(Error error, uint32_t token)
     {
         Serial.printf("[ERROR] MBRain modbus receive: %s | %d\n", String(error), errorTransactionModbusCounter);
+        WebSerial.printf("[ERROR] MBRain modbus receive: %s | %d\n", String(error), errorTransactionModbusCounter);
         errorTransactionModbusCounter++;
     }
 };
