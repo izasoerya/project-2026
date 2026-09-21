@@ -116,6 +116,7 @@ struct contextMBWS
         offset = response.get(offset, modbusData[1]); // H
         offset = response.get(offset, modbusData[2]); // WS
         offset = response.get(offset, modbusData[3]); // WD
+        offset = response.get(offset, modbusData[4]); // IC Temperature
         //  ADDRES 5 - 8 ARE FOR CONFIGURATION
         offset = response.get(offset, modbusData[5]); // DELAY REQ
         offset = response.get(offset, modbusData[6]); // DEBUG STATE (INET, OTA, WEBSER)
@@ -129,13 +130,8 @@ struct contextMBWS
             .windSpeed = modbusData[2] / 10.0F,
             .windDirection = static_cast<WindDirectionEnum>(modbusData[3]),
         };
-        Serial.println(sensorWS.toString());
+        Serial.printf("[INFO] FC03 MBWS Sensor: %s | IC Temp: %.1f\n", sensorWS.toString(), modbusData[4] / 10.0F);
         xQueueSend(queueSensorWS, &sensorWS, pdMS_TO_TICKS(10));
-
-        Serial.print("[INFO] MBWS Incoming FC03: ");
-        for (size_t i = 0; i < response.size(); i++)
-            Serial.printf("%02X ", response[i]);
-        Serial.println();
     }
 
     void onErrorHandler(Error error, uint32_t token)
@@ -167,7 +163,6 @@ struct contextMBRainfall
 
         // ADDRESS 0 - 4 ARE FOR SENSOR DATA
         offset = response.get(offset, modbusData[0]); // Rain in mm
-        offset = response.get(offset, modbusData[1]); // Rain in tipping count
 
         //  ADDRES 5 - 8 ARE FOR CONFIGURATION
         offset = response.get(offset, modbusData[5]); // DELAY REQ
@@ -179,11 +174,7 @@ struct contextMBRainfall
             .rainfall = modbusData[0] / 10.0F,
         };
         xQueueSend(queueSensorRainfall, &sensorRainfall, pdMS_TO_TICKS(10));
-
-        Serial.print("[INFO] MBRain Incoming FC03: ");
-        for (size_t i = 0; i < response.size(); i++)
-            Serial.printf("%02X ", response[i]);
-        Serial.println();
+        Serial.printf("[INFO] FC03 ARR Sensor: %s\n", sensorRainfall.toString());
     }
 
     void onErrorHandler(Error error, uint32_t token)
