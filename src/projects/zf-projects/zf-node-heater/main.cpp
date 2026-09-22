@@ -11,7 +11,8 @@
 #include <UniversalTelegramBot.h>
 
 #define FLOOR_ID 1
-#define PIN_RELAY D6
+#define PIN_RELAY 5
+#define PIN_G_LED 12
 #define BOT_TOKEN "8738540069:AAG1bONoND4JkHNQ_zHLFNh7c6MGEOITWoU"
 #define CHAT_ID "6720768632"
 
@@ -26,11 +27,33 @@ WiFiClientSecure wClient;
 UniversalTelegramBot bot(BOT_TOKEN, wClient);
 X509List cert(TELEGRAM_CERTIFICATE_ROOT);
 
+#define PIN_BUTTON D2 // GPIO4 - adjust if needed for your ESP Witty board
+
+volatile uint32_t lastButtonTime = 0;
+volatile bool buttonPressed = false;
+
+void IRAM_ATTR buttonISR()
+{
+    uint32_t now = millis();
+    if (now - lastButtonTime > 50)
+    {
+        if (digitalRead(PIN_BUTTON) == LOW)
+        {
+            buttonPressed = true;
+            lastButtonTime = now;
+        }
+    }
+}
+
 void setup()
 {
     Serial.begin(115200);
     pinMode(PIN_RELAY, OUTPUT);
-    digitalWrite(PIN_RELAY, HIGH);
+    pinMode(PIN_G_LED, OUTPUT);
+    digitalWrite(PIN_RELAY, LOW);
+    digitalWrite(PIN_G_LED, LOW);
+    pinMode(PIN_BUTTON, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(PIN_BUTTON), buttonISR, CHANGE);
 
     WiFi.disconnect(true);
     WiFi.mode(WIFI_STA);
@@ -97,6 +120,16 @@ void loop()
     MDNS.update();
     ElegantOTA.loop();
     WebSerial.loop();
+
+    if (buttonPressed)
+    {
+        buttonPressed = false;
+        digitalWrite(PIN_RELAY, !digitalRead(PIN_RELAY));
+        digitalWrite(PIN_G_LED, !digitalRead(PIN_G_LED));
+
+        Serial.println("Manual button toggle");
+        WebSerial.println("Manual button toggle");
+    }
 
     static uint64_t prevAutomation = 0;
     if (millis() - prevAutomation > 20000)
