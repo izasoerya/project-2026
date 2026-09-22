@@ -91,7 +91,7 @@ uint8_t adsSensorCounter = 0;
 AsyncWebServer server(80);
 float arrayADS[3];
 
-// #define CALIBRATION
+void scanI2C();
 
 void setup()
 {
@@ -153,6 +153,10 @@ void setup()
                 state = AppState::ENABLE_LOGGING_ADS;
             else if (req == "NORMAL")
                 state = AppState::NORMAL_MODE;
+            else if (req == "MYIP")
+                WebSerial.println(WiFi.localIP().toString());
+            else if (req == "I2C_SCAN")
+                scanI2C();
         });
 
     ElegantOTA.begin(&server);
@@ -160,8 +164,6 @@ void setup()
 
     server.begin();
 }
-
-#ifndef CALIBRATION
 
 uint32_t prevSendBlynk = 0;
 uint32_t prevSampling = 0;
@@ -175,7 +177,7 @@ void loop()
     ElegantOTA.loop();
 
     static PikohidroSensorEntity sensor;
-    if (millis() - prevSampling > 50)
+    if (millis() - prevSampling > 200 && state == AppState::NORMAL_MODE)
     {
         /**
          * @brief Reading in turn since ADS is multiplexer
@@ -189,6 +191,7 @@ void loop()
         else if (adsSensorCounter == 1)
         {
             arrayADS[1] = phSensor.readIntercept(2.525, 2.92);
+            ;
             adsSensorCounter++;
         }
         else if (adsSensorCounter == 2)
@@ -201,6 +204,8 @@ void loop()
         sensor.waterTDS = arrayADS[2];
         sensor.powerIn = inaInput.getPower();   // These are not using ads so its fine to poll
         sensor.powerOut = inaOutput.getPower(); // These are not using ads so its fine to poll
+        Serial.printf("Sensor data: %s\n", sensor.toString());
+        WebSerial.printf("Sensor data: %s\n", sensor.toString());
 
         prevSampling = millis();
     }
@@ -214,7 +219,7 @@ void loop()
                          tdsSensor.readRawVoltage(), phSensor.readRawVoltage(), turbiditySensor.readRawVoltage());
     }
 
-    if (millis() - prevLCDLog > 3000)
+    if (millis() - prevLCDLog > 3000 && state == AppState::NORMAL_MODE)
     {
         lcd.clear();
         lcd.setCursor(0, 0);
@@ -238,21 +243,17 @@ void loop()
 
         lcd.setCursor(0, 3);
         lcd.write(byte(5));
-        lcd.printf("I:%.1fW", abs(sensor.powerIn));
+        lcd.printf("O:%.1fW", abs(sensor.powerIn));
 
         lcd.setCursor(10, 3);
         lcd.write(byte(5));
-        lcd.printf("O:%.1fW", abs(sensor.powerOut));
+        lcd.printf("I:%.1fW", abs(sensor.powerOut));
 
         prevLCDLog = millis();
     }
 
-    if (millis() - prevSendBlynk > 30000)
+    if (millis() - prevSendBlynk > 30000 && state == AppState::NORMAL_MODE)
     {
-        const char *sensorString = sensor.toString();
-        Serial.println(sensorString);
-        WebSerial.println(sensorString);
-
         PikohidroSystemEntity system{
             .freeHeap = ESP.getFreeHeap(),
             .largestFreeBlock = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT),
@@ -273,43 +274,33 @@ void loop()
     }
 }
 
-#endif
-
-#ifdef CALIBRATION
-int16_t array[4];
-uint32_t prevCalibration = 0;
-void loop()
+void scanI2C()
 {
-    // blynk.run();
-    // blynk.reconnect();
-    ElegantOTA.loop();
+    WebSerial.println("\nScanning I2C bus...");
+    Serial.println("\nScanning I2C bus...");
 
-    if (millis() - prevCalibration > 50)
+    uint8_t count = 0;
+    for (uint8_t address = 1; address < 127; address++)
     {
-        if (adsSensorCounter == 0)
-        {
-            array[0] = ads.read(0);
-            adsSensorCounter++;
-        }
-        else if (adsSensorCounter == 1)
-        {
-            array[1] = phSensor.readRawVoltage();
-            adsSensorCounter++;
-        }
-        else if (adsSensorCounter == 2)
-        {
-            array[2] = ads.read(2);
-            adsSensorCounter++;
-        }
-        else if (adsSensorCounter == 3)
-        {
-            array[3] = ads.read(3);
-            adsSensorCounter = 0;
-        }
-        WebSerial.printf("A0: %d | A1: %d | A2: %d | A3 %d\n",
-                         array[0], array[1], array[2], array[3]);
+        Wire.beginTransmission(address);
+        uint8_t error = Wire.endTransmission();
 
-        prevCalibration = millis();
+        if (error == 0)
+        {
+            WebSerial.printf("I2C device found at 0x%02X\n", address);
+            Serial.printf("I2C device found at 0x%02X\n", address);
+            count++;
+        }
+    }
+
+    if (count == 0)
+    {
+        WebSerial.println("No I2C devices found!");
+        Serial.println("No I2C devices found!");
+    }
+    else
+    {
+        WebSerial.printf("\nTotal devices found: %d\n", count);
+        Serial.printf("\nTotal devices found: %d\n", count);
     }
 }
-#endif
