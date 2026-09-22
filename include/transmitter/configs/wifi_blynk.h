@@ -77,7 +77,7 @@ public:
 
     void reconnect()
     {
-        _wifi.reconnect();
+        _wifi.reconnect(true, nullptr);
     }
 };
 
