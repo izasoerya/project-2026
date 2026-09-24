@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <WebSerial.h>
+#include <sensor/configs/modbus_sensor.h>
 
 class DebugTools
 {
@@ -69,6 +70,19 @@ class DebugTools
         }
         if (nDevices == 0)
             s.println("No I2C devices found\n");
+    }
+
+    static void modbusScanner(Stream &src, uint8_t id, uint8_t fc, uint8_t sa, uint8_t la)
+    {
+        Modbustatics debugSensor(1, "debug sensor", src, sa);
+
+        debugSensor.begin();
+        ReadResult x = debugSensor.rawRead();
+
+        if (x.isOk())
+            Serial.printf("Success Read: %d", x.value);
+        else
+            Serial.println(x.errorMessage());
     }
 };
 
