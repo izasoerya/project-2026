@@ -6,18 +6,38 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <stdint.h>
+#include <ArduinoJson.h>
 
-struct SensorSnapshot
+struct SensorObject
 {
     float turbidity;
     float awlr;
     float battery;
+
+    const char *toString()
+    {
+        static char buffer[64];
+        snprintf(buffer, sizeof(buffer),
+                 "TURB: %.1f | LVL: %.1f | BATT: %.1f\n",
+                 turbidity, awlr, battery);
+        return buffer;
+    }
+
+    const char *toJson()
+    {
+        static JsonDocument doc;
+        doc["turbidity"] = turbidity;
+        doc["level"] = awlr;
+        doc["battery"] = battery;
+        static char buffer[64];
+        serializeJson(doc, buffer);
+    }
 };
 
 class SensorDataStore
 {
 private:
-    SensorSnapshot _state;
+    SensorObject _state;
     SemaphoreHandle_t _mutex;
 
 public:
@@ -43,7 +63,7 @@ public:
         return false; // Timeout
     }
 
-    bool getSnapshot(SensorSnapshot &outSnapshot)
+    bool getSnapshot(SensorObject &outSnapshot)
     {
         if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(10)) == pdTRUE)
         {
