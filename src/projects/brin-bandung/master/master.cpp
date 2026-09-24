@@ -4,7 +4,7 @@
 #include <Wire.h>
 #include <WireGuard-ESP32.h>
 
-#define DEVICE_ID 0
+#define DEVICE_ID 1
 
 #include "../config.h" // .env
 #include "../utils/ntp_service.h"
@@ -27,7 +27,7 @@ void setup()
     static sharedModbusClientContext sharedMBClient(Serial1);
     static contextMBWS wsCtx(Serial1, sharedMBClient);
     static contextMBRainfall rainCtx(Serial1, sharedMBClient);
-    static contextDisplay displayCtx(SPI);
+    static contextDisplay displayCtx(SPI, wifi);
     static contextPublisher publisherCtx(wifi);
     static contextDaemon daemonCtx(wifi);
 

@@ -17,7 +17,7 @@
  * [0] = CISANGKUY
  * [1] = CIMINYAK
  */
-#define DEVICE_ID 0
+#define DEVICE_ID 1
 
 const char *ssid = "NodeSensorWiFi1";
 const char *password = "muhammadnabiyullah";

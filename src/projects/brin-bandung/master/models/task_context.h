@@ -16,7 +16,7 @@ static volatile uint16_t sharedModbusDataARR[16];
 
 struct sharedDelayContext
 {
-    uint32_t delay = 60000 * 5; // 5 Minutes default
+    uint32_t delay = 60000; // 5 Minutes default
 };
 
 struct sharedModbusClientContext
@@ -203,13 +203,14 @@ struct contextPublisher
 
 struct contextDisplay
 {
+    WiFiModule &wifi;
     SPIClass &spi;
     const uint8_t pinSCK = 9;
     const uint8_t pinMISO = 10;
     const uint8_t pinMOSI = 8;
     const uint8_t pinCS = 5;
 
-    contextDisplay(SPIClass &s) : spi(s) {}
+    contextDisplay(SPIClass &s, WiFiModule &w) : spi(s), wifi(w) {}
 };
 
 struct contextDaemon

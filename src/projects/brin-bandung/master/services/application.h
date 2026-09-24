@@ -15,6 +15,8 @@ extern QueueHandle_t queueSensorWS;
 #include "../utils/parser.h"
 #include "../services/command_parser.h"
 #include <projects/brin-bandung/slave-arr/utils/modbus_utility.h>
+#include <HTTPClient.h>
+#include <ArduinoJson.h>
 
 TaskHandle_t handleReadRainfall;
 TaskHandle_t handleMBSlave;
@@ -95,7 +97,7 @@ public:
         while (ctx->getNTPStatus() == FeatureStatus::NTP)
             vTaskDelay(500 / portTICK_PERIOD_MS);
         WireGuard wg;
-        WireGuardConfig wgConfig = wgConfigs[0]; // TODO: CHANGE BASED ON SETUP
+        WireGuardConfig wgConfig = wgConfigs[1]; // TODO: CHANGE BASED ON SETUP
         IPAddress wgLocalIP;
         wgLocalIP.fromString(wgConfig.master.localIp);
         String wgIp = wgLocalIP.toString();
@@ -299,7 +301,7 @@ public:
             {
                 sensor.temperature = ws.temperature;
                 sensor.humidity = ws.humidity;
-                if (sensor.windSpeed < 1.5)
+                if (ws.windSpeed < 1.5)
                     sensor.windSpeed = 0;
                 else
                     sensor.windSpeed = ws.windSpeed;
@@ -314,10 +316,7 @@ public:
             }
 
             if (sensorUpdated)
-            {
-                if (singletonSensorFull.update(sensor))
-                    xQueueSend(queueSensorDashboard, &sensor, pdMS_TO_TICKS(10));
-            }
+                singletonSensorFull.update(sensor);
 
             if (millis() - lastStoreTime >= 30000)
             {
@@ -357,6 +356,9 @@ public:
                 sensor.toJson(jsonBuffer, sizeof(jsonBuffer));
                 int16_t response = ctx->wifi.send(ctx->tableSensor, jsonBuffer);
 
+                if (response >= 200 && response < 300 && singletonSensorFull.update(sensor))
+                    xQueueSend(queueSensorDashboard, &sensor, pdMS_TO_TICKS(10));
+
                 Serial.printf("[INFO] POST Supa (avg of %u): %d\n", pointsCollected, response);
                 WebSerial.printf("[INFO] POST Supa (avg of %u): %d\n", pointsCollected, response);
 
@@ -367,6 +369,37 @@ public:
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
+    }
+
+    static float _getRainfallHourly(uint8_t deviceId)
+    {
+        HTTPClient http;
+
+        String url = "https://pykernnkhvnssplhzcvn.supabase.co/rest/v1/rainfall_hourly?device_id=eq." +
+                     String(deviceId) + "&order=jam.desc&limit=1";
+
+        http.begin(url);
+        http.addHeader("apikey", "sb_publishable_coDPUa845ZtfYmoBWlZlgw_eH5vsCY7");
+        http.addHeader("Content-Type", "application/json");
+
+        int code = http.GET();
+        if (code != 200)
+        {
+            http.end();
+            return 0.0;
+        }
+
+        String payload = http.getString();
+        http.end();
+
+        StaticJsonDocument<512> doc;
+        deserializeJson(doc, payload);
+
+        if (doc.size() == 0)
+            return 0.0;
+
+        float rainMm = doc[0]["rain_mm"] | 0.0;
+        return rainMm;
     }
 
     static void taskDisplayDashboard(void *pvParam)
