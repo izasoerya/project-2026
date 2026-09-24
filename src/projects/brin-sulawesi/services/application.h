@@ -166,8 +166,8 @@ public:
         SensorContext *ctx = static_cast<SensorContext *>(pvParam);
         while (1)
         {
-            ReadResult resTurbidity = ctx->turbidity.read(0);
-            ReadResult resAwlr = ctx->awlr.read(0);
+            ReadResult resTurbidity = ctx->turbidity.rawRead();
+            ReadResult resAwlr = ctx->awlr.rawRead();
             float batteryRead = analogRead(A10);
 
             float turbidity, waterLevel;

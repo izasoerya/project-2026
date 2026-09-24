@@ -16,10 +16,10 @@ struct FeatureState
 
 struct SensorContext
 {
-    ModbusRTUBuilder &turbidity;
-    ModbusRTUBuilder &awlr;
+    Modbustatics &turbidity;
+    Modbustatics &awlr;
 
-    SensorContext(ModbusRTUBuilder &t, ModbusRTUBuilder &l) : turbidity(t), awlr(l) {}
+    SensorContext(Modbustatics &t, Modbustatics &l) : turbidity(t), awlr(l) {}
 };
 
 struct NetworkingContext
