@@ -43,6 +43,7 @@ public:
             bool success = _mqttClient.connect();
             return success;
         }
+        return true;
     }
 
     bool disconnect()
