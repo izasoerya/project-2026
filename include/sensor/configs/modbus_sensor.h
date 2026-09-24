@@ -93,6 +93,11 @@ public:
             return res.error; // TODO: SHOULD RETURN ACTUAL ERROR INSTEAD OF NUMBER
         }
     }
+
+    ReadResult rawRead()
+    {
+        return _modbusConfig.read(0);
+    }
 };
 
 #endif // MODBUS_SENSOR_H
