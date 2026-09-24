@@ -4,8 +4,9 @@
 #include <freertos/semphr.h>
 #include <sensor/configs/modbus_sensor.h>
 #include "../services/appstate_parser.h"
-#include "./transmitter/configs/mqtt_module.h"
 #include "../models/profile.h"
+#include "transmitter/configs/mqtt_module.h"
+#include "transmitter/configs/wifi_module.h"
 
 struct FeatureState
 {
@@ -13,10 +14,31 @@ struct FeatureState
     bool isMQTTAlwaysEnabled;
 };
 
+struct SensorContext
+{
+    ModbusRTUBuilder &turbidity;
+    ModbusRTUBuilder &awlr;
+
+    SensorContext(ModbusRTUBuilder &t, ModbusRTUBuilder &l) : turbidity(t), awlr(l) {}
+};
+
+struct NetworkingContext
+{
+    const char *ssid = GlobalConfig::ssid;
+    const char *password = GlobalConfig::password;
+    char hostname[32];
+
+    WiFiModule &wifi;
+
+    NetworkingContext(WiFiModule &w) : wifi(w)
+    {
+        snprintf(hostname, sizeof(hostname), "%s-%d", GlobalConfig::hostname, GlobalConfig::deviceID);
+    }
+};
+
 struct MQTTContext
 {
-    bool isInetnetEnabled;
-    bool isEnabled;
+    static void onMessage(const char *topic, const char *payload) {}
 };
 
 struct ApplicationContext
