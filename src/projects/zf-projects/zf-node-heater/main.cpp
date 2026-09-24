@@ -10,7 +10,7 @@
 #include "models/actuator_mode.h"
 #include <UniversalTelegramBot.h>
 
-#define FLOOR_ID 1
+#define FLOOR_ID 3
 #define PIN_RELAY 5
 #define PIN_G_LED 12
 #define BOT_TOKEN "8738540069:AAG1bONoND4JkHNQ_zHLFNh7c6MGEOITWoU"
@@ -131,7 +131,16 @@ void loop()
         WebSerial.println("Manual button toggle");
     }
 
-    static uint64_t prevAutomation = 0;
+    static uint32_t prevLog = 0;
+    if (millis() - prevLog > 1000)
+    {
+        prevLog = millis();
+
+        Serial.printf("RSSI: %d\n", WiFi.RSSI());
+        WebSerial.printf("RSSI: %d\n", WiFi.RSSI());
+    }
+
+    static uint32_t prevAutomation = 0;
     if (millis() - prevAutomation > 20000)
     {
         prevAutomation = millis();
