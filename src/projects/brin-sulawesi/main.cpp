@@ -1,16 +1,11 @@
 #include <Preferences.h>
-#include <freertos/FreeRTOS.h>
-#include <ElegantOTA.h>
-#include <WebSerial.h>
 
 #include "consts/global_config.h"
 #include "consts/sensors.h"
 #include "models/profile.h"
-#include "services/application.h"
-#include "services/appstate_parser.h"
-#include "transmitter/configs/wifi_module.h"
-#include "transmitter/configs/mqtt_module.h"
 #include "models/task_context.h"
+#include "services/fsm_kernel.h"
+#include "transmitter/configs/wifi_module.h"
 
 WiFiModule inet(
     GlobalConfig::ssid,
@@ -21,8 +16,7 @@ WiFiModule inet(
 Modbustatics *turbSensor = nullptr;
 Modbustatics *awlrSensor = nullptr;
 
-AsyncWebServer server(80);
-CommandHandler handler;
+FSMKernel *kernel = nullptr;
 
 void setup()
 {
@@ -40,6 +34,8 @@ void setup()
     Serial.begin(115200);
     Serial.printf("Firmware ID: %u\n", firmwareId);
 
+    esp_sleep_enable_timer_wakeup(30 * 1000000ULL); // Sleep for 30s
+
     for (int i = 0; i < sizeof(turb_list) / sizeof(Modbustatics); i++)
     {
         if (turb_list[i].getId() == firmwareId)
@@ -52,18 +48,13 @@ void setup()
     const float batteryWarningLevel = 12.0;
     Profile batteryProfileDefault(batteryDangerLevel, batteryWarningLevel);
 
-    static ApplicationContext ctx; // Mutex lock context variable
-    ctx.state = AppState::NORMAL;
-    ctx.mbTurbidity = turbSensor;
-    ctx.mbAwlr = awlrSensor;
-    ctx.batteryProfile = &batteryProfileDefault;
-
     static NetworkingContext networkCtx(inet);
+    static SensorContext sensorCtx(*turbSensor, *awlrSensor);
 
-    xTaskCreate(Application::sensorAgregatorTask, "publisher task", 8192, &ctx, 2, &mainTaskHandle);
-    xTaskCreate(Application::samplingTask, "sampling task", 8192, &ctx, 3, &samplingTaskHandle);
-    xTaskCreate(Application::calibrateTask, "calibrate turbidity", 4096, &ctx, 3, &calibrateHandle);
-    xTaskCreate(Application::notifierTask, "notifier task", 4096, &ctx, 1, &notifierTaskHandle);
+    kernel = new FSMKernel(&sensorCtx, &networkCtx);
 }
 
-void loop() { vTaskDelay(portMAX_DELAY); }
+void loop()
+{
+    kernel->loop();
+}

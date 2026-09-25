@@ -1,23 +1,9 @@
 #if !defined(APPLICATION_H)
 #define APPLICATION_H
 
-#include <ElegantOTA.h>
-#include <WebSerial.h>
-
 #include "../consts/sensors.h"
 #include "../models/task_context.h"
 #include "../models/datastore.h"
-
-SensorDataStore globalSensorStore;
-
-static TaskHandle_t mainTaskHandle;
-static TaskHandle_t samplingTaskHandle;
-static TaskHandle_t calibrateHandle;
-static TaskHandle_t notifierTaskHandle;
-static TaskHandle_t mqttThreadTaskHandle;
-
-static QueueHandle_t queueSensorAgregator;
-static QueueHandle_t queueSensorPublish;
 
 struct MqttPayload
 {
@@ -28,167 +14,77 @@ struct MqttPayload
 class Application
 {
 public:
-    static void init()
-    {
-        queueSensorPublish = xQueueCreate(10, sizeof(MqttPayload));
-        queueSensorAgregator = xQueueCreate(10, sizeof(SensorObject));
-    }
-
-    static void networkingTask(void *pvParam)
+    static bool networkingTask(void *pvParam, MqttPayload payload)
     {
         NetworkingContext *ctx = static_cast<NetworkingContext *>(pvParam);
-        bool isWiFiConnected = false;
-        ctx->wifi.beginNB([&isWiFiConnected](bool c)
-                          { isWiFiConnected = c; });
-
-        while (!isWiFiConnected)
-            vTaskDelay(500 / portTICK_PERIOD_MS);
-
-        AsyncWebServer server(80);
-        ElegantOTA.begin(&server);
-        ElegantOTA.setAutoReboot(true);
-        WebSerial.begin(&server);
-        server.begin();
+        while (WiFi.status() != WL_CONNECTED)
+            ctx->wifi.begin(false); // BLOCKING TIMEOUT 20S
 
         MQTTModule mqtt(
             GlobalConfig::usernameMqtt,
             GlobalConfig::passwordMqtt,
-            GlobalConfig::brokerMqtt);
-        MqttPayload payload;
-        bool isMQTTConnected = mqtt.connect();
-
-        while (1)
-        {
-            static uint8_t counter = 0;
-            if (WiFi.status() != WL_CONNECTED)
-            {
-                isWiFiConnected = false;
-                counter++;
-                if (counter == 20)
-                {
-                    ctx->wifi.disconnect();
-                    ctx->wifi.beginNB([&isWiFiConnected](bool c)
-                                      { isWiFiConnected = c; });
-                }
-            }
-            else
-            {
-                isWiFiConnected = true;
-                counter = 0;
-
-                ElegantOTA.loop();
-                WebSerial.loop();
-
-                if (mqtt.reconnect())
-                {
-                    isMQTTConnected = true;
-                    if (xQueueReceive(queueSensorPublish, &payload, 0) == pdPASS)
-                        mqtt.publish(payload.topic, payload.message);
-                }
-                else
-                    isMQTTConnected = false;
-            }
-
-            vTaskDelay(20 / portTICK_PERIOD_MS);
-        }
+            GlobalConfig::brokerMqtt,
+            GlobalConfig::portMqtt);
+        bool isMQTTConnected = mqtt.connect(); // BLOCKING TIMEOUT 20S
+        if (mqtt.connect())
+            return mqtt.publish(payload.topic, payload.message) != 0;
+        return false;
     }
 
-    static void daemonTask(void *pvParam)
+    static SensorObject sensorAgregatorTask(SensorObject sensor, bool resetBuffer)
     {
-        ApplicationContext *ctx = static_cast<ApplicationContext *>(pvParam);
-        SensorObject current;
-        while (1)
+        static SensorObject sensorDatapoints[32];
+        static uint8_t arrayPointer = 0;
+
+        if (!resetBuffer && arrayPointer < 32)
+            sensorDatapoints[arrayPointer++] = sensor;
+
+        float avgTurbidity = 0.0f;
+        float avgAwlr = 0.0f;
+        float avgBattery = 0.0f;
+        for (uint8_t i = 0; i < arrayPointer; ++i)
         {
-            if (globalSensorStore.getSnapshot(current))
-            {
-                if (current.battery < ctx->batteryProfile->getBottomSet()) // Low on battery
-                {
-                    vTaskSuspend(mainTaskHandle);
-                    vTaskSuspend(samplingTaskHandle);
-                    vTaskSuspend(notifierTaskHandle);
-                }
-                else if (current.battery > ctx->batteryProfile->getTopSet()) // Safe to resume
-                {
-                    vTaskResume(mainTaskHandle);
-                    vTaskResume(samplingTaskHandle);
-                    vTaskResume(notifierTaskHandle);
-                }
-
-                if (!ctx->feature.isMQTTEnabled)
-                    vTaskSuspend(mqttThreadTaskHandle);
-                else if (ctx->feature.isMQTTEnabled)
-                    vTaskResume(mqttThreadTaskHandle);
-            }
-
-            vTaskDelay(10 / portTICK_PERIOD_MS);
+            avgTurbidity += sensorDatapoints[i].turbidity;
+            avgAwlr += sensorDatapoints[i].awlr;
+            avgBattery += sensorDatapoints[i].battery;
         }
-    }
-
-    static void sensorAgregatorTask(void *pvParam)
-    {
-        SensorContext *ctx = static_cast<SensorContext *>(pvParam);
-        SensorObject sensor;
-        SensorObject sensorDatapoints[32];
-        while (1)
+        SensorObject avgSensor = {0.0f, 0.0f, 0.0f};
+        if (arrayPointer > 0)
         {
-            if (xQueueReceive(queueSensorAgregator, &sensor, pdMS_TO_TICKS(0)))
-            {
-                static uint8_t index = 0;
-                sensorDatapoints[index] = sensor;
-
-                if (index == 31)
-                    index = 0;
-
-                static uint32_t prevQueueMqtt = 0;
-                if (millis() - prevQueueMqtt > 60000)
-                {
-                    float avgTurbidity, avgAwlr, avgBattery;
-                    for (uint8_t i = 0; i < 32; i++)
-                    {
-                        avgTurbidity += sensorDatapoints[i].turbidity;
-                        avgAwlr += sensorDatapoints[i].awlr;
-                        avgBattery += sensorDatapoints[i].battery;
-                    }
-                    SensorObject avgSensor = SensorObject{
-                        .turbidity = avgTurbidity /= 32,
-                        .awlr = avgAwlr /= 32,
-                        .battery = avgBattery /= 32,
-                    };
-                    xQueueSend(queueSensorPublish, &avgSensor, pdMS_TO_TICKS(10));
-                }
-            }
-            vTaskDelay(5000 / portTICK_PERIOD_MS);
-        }
-    }
-
-    static void samplingTask(void *pvParam)
-    {
-        SensorContext *ctx = static_cast<SensorContext *>(pvParam);
-        while (1)
-        {
-            ReadResult resTurbidity = ctx->turbidity.rawRead();
-            ReadResult resAwlr = ctx->awlr.rawRead();
-            float batteryRead = analogRead(A10);
-
-            float turbidity, waterLevel;
-            if (resTurbidity.isOk())
-                turbidity = resTurbidity.value;
-            if (resAwlr.isOk())
-                waterLevel = resAwlr.value;
-
-            static SensorObject sensor = SensorObject{
-                .turbidity = turbidity,
-                .awlr = waterLevel,
-                .battery = batteryRead};
-            static MqttPayload payload = MqttPayload{
-                .topic = GlobalConfig::SENSOR_TOPIC,
-                .message = sensor.toJson(),
+            avgSensor = SensorObject{
+                .turbidity = avgTurbidity / arrayPointer,
+                .awlr = avgAwlr / arrayPointer,
+                .battery = avgBattery / arrayPointer,
             };
-
-            xQueueSend(queueSensorAgregator, &sensor, pdTICKS_TO_MS(20));
-
-            vTaskDelay(5000 / portTICK_PERIOD_MS);
         }
+
+        if (resetBuffer)
+        {
+            memset(sensorDatapoints, 0, sizeof(sensorDatapoints));
+            arrayPointer = 0;
+        }
+        return avgSensor;
+    }
+
+    static SensorObject samplingTask(void *pvParam)
+    {
+        SensorContext *ctx = static_cast<SensorContext *>(pvParam);
+
+        // ReadResult resTurbidity = ctx->turbidity.rawRead();
+        // ReadResult resAwlr = ctx->awlr.rawRead();
+        // float batteryRead = analogRead(A10);
+
+        // float turbidity, waterLevel;
+        // if (resTurbidity.isOk())
+        //     turbidity = resTurbidity.value;
+        // if (resAwlr.isOk())
+        //     waterLevel = resAwlr.value;
+
+        static SensorObject sensor = SensorObject{
+            .turbidity = 10,
+            .awlr = 22,
+            .battery = 2.3};
+        return sensor;
     }
 
     static void calibrateTask(void *pvParam)
@@ -220,20 +116,6 @@ public:
                 counter = 0;
             }
             vTaskDelay(50 / portTICK_PERIOD_MS);
-        }
-    }
-
-    static void notifierTask(void *pvParam)
-    {
-        ApplicationContext *ctx = static_cast<ApplicationContext *>(pvParam);
-        MqttPayload payload;
-        while (1)
-        {
-            payload.topic = "/test";
-            payload.message = "Battery Level Warning";
-            xQueueSend(queueSensorPublish, &payload, pdMS_TO_TICKS(10));
-
-            vTaskDelay(60000 / portTICK_PERIOD_MS);
         }
     }
 };
