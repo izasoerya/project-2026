@@ -57,6 +57,31 @@ public:
         return false;
     }
 
+    bool begin(bool mdns)
+    {
+        WiFi.mode(wifi_mode_t::WIFI_MODE_STA);
+        WiFi.begin(_ssid, _password);
+        uint32_t attemptTimestamp = millis();
+        while (WiFi.status() != WL_CONNECTED)
+        {
+            Serial.print(".");
+            delay(500);
+            if (millis() - attemptTimestamp > 20000)
+                return false;
+        }
+        Serial.printf("Connected with IP: %s\n", WiFi.localIP().toString());
+
+        if (!mdns)
+            return true;
+        else
+        {
+            if (!MDNS.begin(_hostname))
+                return false;
+            MDNS.addService("http", "tcp", 80);
+        }
+        return true;
+    }
+
     void beginNB(std::function<void(bool)> onResult = nullptr)
     {
         struct AsyncWiFiTask
@@ -103,28 +128,12 @@ public:
 
     void disconnect() { WiFi.disconnect(); }
 
-    // void reconnect()
-    // {
-    //     if (WiFi.status() != WL_CONNECTED)
-    //     {
-    //         xTaskCreate(
-    //             [](void *pvParam)
-    //             {
-    //                 static uint32_t prevTime = millis();
-    //                 while (WiFi.status() != WL_CONNECTED)
-    //                 {
-    //                     vTaskDelay(500 / portTICK_PERIOD_MS);
-    //                     if (millis() - prevTime > 20000)
-    //                     {
-    //                         disconnect();
-    //                         beginNB();
-    //                     }
-    //                 }
-    //                 vTaskDelete(NULL);
-    //             },
-    //             "Polling reconnect", 2048, nullptr, 1, nullptr);
-    //     }
-    // }
+    void disableWiFi()
+    {
+        disconnect();
+        WiFi.mode(WIFI_OFF);
+        MDNS.end();
+    }
 
     IPAddress resolveMDNS(const char *hostname)
     {
