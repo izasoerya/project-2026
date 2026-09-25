@@ -51,7 +51,7 @@ public:
             ctx->setNTPStatus(FeatureStatus::WORKING);
 
         WireGuard wg;
-        WireGuardConfig wgConfig = wgConfigs[0]; // TODO: CHANGE BASED ON SETUP
+        WireGuardConfig wgConfig = wgConfigs[1]; // TODO: CHANGE BASED ON SETUP
         IPAddress wgLocalIP;
         wgLocalIP.fromString(wgConfig.slave.localIp);
         Serial.printf("wg ip: %s\n", wgLocalIP.toString());
@@ -151,6 +151,7 @@ public:
         while (1)
         {
             String data = wdCtx->serial.readStringUntil('#'); // data sensor berawalan * dan diakhiri #, contoh *1#
+            Serial.printf("RAW WD: %s\n", data.c_str());
             if (data.length() > 0)
                 data += '#';
 

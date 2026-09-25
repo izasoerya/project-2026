@@ -68,6 +68,7 @@ struct contextMB
             response.add(request.getServerID(), request.getFunctionCode(), (uint8_t)(words * 2));
             for (uint16_t i = address; i < address + words; ++i)
                 response.add(modbusData[i]);
+            Serial.printf("[INFO] FC03 response prepared: %d bytes\n", response.size());
         }
         else
             response.setError(request.getServerID(), request.getFunctionCode(), ILLEGAL_DATA_ADDRESS);

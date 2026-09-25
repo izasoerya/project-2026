@@ -2,6 +2,7 @@
 #define APPLICATION_H
 
 #include <ModbusServerRTU.h>
+#include <RTUutils.h>
 #include "nvs_manager.h"
 #include "projects/brin-bandung/slave-arr/utils/enum.h"
 #include "projects/brin-bandung/slave-arr/models/task_context.h"
@@ -156,6 +157,7 @@ public:
         bool resetDoneToday = false;
 
         Wire.begin(ctx->pinSDA, ctx->pinSCL);
+        bool rainfall_fail = false;
         if (rainSensor.begin())
         {
             float lastRainValue = NVSManager::getRainfall();
@@ -165,12 +167,20 @@ public:
         else
         {
             // TODO: HANDLE IF RAINFALL SENSOR FAIL
+            rainfall_fail = true;
             Serial.printf("Failed to begin I2C Sensor");
         }
 
         while (1)
         {
-            float rain = rainSensor.getRainfall();
+            if (rainfall_fail)
+            {
+                Serial.printf("[ERROR] Rainfall sensor failed\n");
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                continue;
+            }
+            float rain = rainSensor.getRawData() * 0.2794F;
+            Serial.printf("[INFO] Rainfall sensor: %.1f mm\n", rain);
             SensorObject snapshot = SensorObject{
                 .rainfall = rain,
             };
@@ -187,13 +197,13 @@ public:
                 Serial.println("Failed to update sensor datastore");
 
             TimeStruct ts = NTPService::getTime();
-            if (ts.hour == 0 && ts.minute == 0 && !resetDoneToday)
+            if (ts.hour == 19 && ts.minute == 40 && !resetDoneToday)
             {
                 rainSensor.setRainAccumulatedValue(0);
                 NVSManager::storeRainfall(0.0F);
                 resetDoneToday = true;
             }
-            else if (ts.hour != 0 || ts.minute != 0)
+            else if (ts.hour != 19 || ts.minute != 40)
                 resetDoneToday = false;
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -206,6 +216,7 @@ public:
         ModbusServerRTU mbServer(2000); // Timeout 2000ms
         SensorObject payload;
 
+        RTUutils::prepareHardwareSerial(mbCtx->serial);
         mbCtx->serial.begin(9600, SERIAL_8N1, mbCtx->pinRX, mbCtx->pinTX);
         mbServer.registerWorker(0x02, READ_HOLD_REGISTER, [mbCtx](ModbusMessage request)
                                 { return mbCtx->FC03(request); });
@@ -218,7 +229,9 @@ public:
         {
             if (xQueueReceive(queueSensor, &payload, 0) == pdPASS)
             {
-                mbCtx->modbusData[0] = uint16_t(payload.rainfall * 10);
+                mbCtx->modbusData[0] = uint16_t(roundf(payload.rainfall * 10.0F));
+                Serial.printf("[INFO] Rainfall register: %u (%.1f mm)\n",
+                              mbCtx->modbusData[0], mbCtx->modbusData[0] / 10.0F);
             }
 
             vTaskDelay(2000 / portTICK_PERIOD_MS);
