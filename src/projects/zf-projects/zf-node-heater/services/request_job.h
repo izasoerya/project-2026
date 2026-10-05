@@ -30,7 +30,7 @@ private:
         "433b141d-b7db-415f-86e0-c42f322dbefg",
         "433b141d-b7db-415f-86e0-c42f322dbefh",
     };
-    const char *_serverAddress = "172.29.183.12:8000";
+    const char *_serverAddress = "panel-control-v4-pd1.local:8000";
     char _urlSensorReq[128];
     char _urlActuatorReq[128];
     char _urlActuatorModeReq[128];

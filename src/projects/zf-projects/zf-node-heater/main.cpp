@@ -10,13 +10,13 @@
 #include "models/actuator_mode.h"
 #include <UniversalTelegramBot.h>
 
-#define FLOOR_ID 3
+#define FLOOR_ID 2
 #define PIN_RELAY 5
 #define PIN_G_LED 12
 #define BOT_TOKEN "8738540069:AAG1bONoND4JkHNQ_zHLFNh7c6MGEOITWoU"
 #define CHAT_ID "6720768632"
 
-const char *ssid = "NodeSensorWiFi1";
+const char *ssid = "NodeSensorWiFi";
 const char *password = "muhammadnabiyullah";
 void automationTask(Actuator actuator);
 
@@ -101,7 +101,7 @@ void setup()
 
 void automationTask(Actuator actuator)
 {
-    bool prevData = !actuator.state; // Active Low
+    bool prevData = actuator.state; // Active Low
     digitalWrite(PIN_RELAY, prevData);
     bool actualValue = digitalRead(PIN_RELAY);
     if (prevData != actualValue)
@@ -111,8 +111,8 @@ void automationTask(Actuator actuator)
         bot.sendMessage(CHAT_ID, "Discrepancy output detected!", "");
     }
 
-    Serial.printf("RELAY: %s\n", actualValue ? "OFF" : "ON");
-    WebSerial.printf("RELAY: %s\n", actualValue ? "OFF" : "ON");
+    Serial.printf("RELAY: %s\n", actualValue ? "ON" : "OFF");
+    WebSerial.printf("RELAY: %s\n", actualValue ? "ON" : "OFF");
 }
 
 void loop()
@@ -127,8 +127,8 @@ void loop()
         digitalWrite(PIN_RELAY, !digitalRead(PIN_RELAY));
         digitalWrite(PIN_G_LED, !digitalRead(PIN_G_LED));
 
-        Serial.println("Manual button toggle");
-        WebSerial.println("Manual button toggle");
+        Serial.printf("Manual button relay: %d\n", digitalRead(PIN_RELAY));
+        WebSerial.printf("Manual button relay: %d\n", digitalRead(PIN_RELAY));
     }
 
     static uint32_t prevLog = 0;
