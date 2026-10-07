@@ -6,7 +6,7 @@
 namespace GlobalConfig
 {
     constexpr uint8_t deviceID = 1;
-    constexpr uint32_t DELAY_SAMPLING = 5000;
+    constexpr uint32_t DELAY_SAMPLING = 30000;
     constexpr uint32_t DELAY_TX = 60000;
 
     constexpr const char *ssid = "Subhanallah";
@@ -19,6 +19,7 @@ namespace GlobalConfig
     constexpr const uint16_t portMqtt = 8883;
     constexpr const char *SENSOR_TOPIC = "sensor";
 
+    constexpr HardwareSerial &mbSerial = Serial1;
 };
 
 #endif // CONFIG_H
