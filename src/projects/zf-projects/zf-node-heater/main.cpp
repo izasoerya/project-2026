@@ -19,9 +19,10 @@
 const char *ssid = "NodeSensorWiFi";
 const char *password = "muhammadnabiyullah";
 void automationTask(Actuator actuator);
+void timeoutActuatorCb();
 
 AsyncWebServer server(80);
-RequestJob req(FLOOR_ID, automationTask);
+RequestJob req(FLOOR_ID, automationTask, timeoutActuatorCb);
 
 WiFiClientSecure wClient;
 UniversalTelegramBot bot(BOT_TOKEN, wClient);
@@ -100,6 +101,13 @@ void automationTask(Actuator actuator)
 
     Serial.printf("RELAY: %s\n", actualValue ? "ON" : "OFF");
     WebSerial.printf("RELAY: %s\n", actualValue ? "ON" : "OFF");
+}
+
+void timeoutActuatorCb()
+{
+    static char buffer[64];
+    snprintf(buffer, sizeof(buffer), "Node Heater-%d Timeout Fetch Actuator", FLOOR_ID);
+    bot.sendMessage(CHAT_ID, buffer, "");
 }
 
 void loop()

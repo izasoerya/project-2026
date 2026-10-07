@@ -49,9 +49,10 @@ private:
 
     asyncHTTPrequest _request;
     std::function<void(Actuator)> _cb;
+    std::function<void()> _cbTimeout = nullptr;
 
 public:
-    RequestJob(uint8_t floor, std::function<void(Actuator)> cb) : _cb(cb)
+    RequestJob(uint8_t floor, std::function<void(Actuator)> cb, std::function<void()> timeoutCb) : _cb(cb), _cbTimeout(timeoutCb)
     {
         snprintf(_urlSensorReq, sizeof(_urlSensorReq),
                  "http://%s/sensor/find-latest/%s", _serverAddress, _floorIds[floor - 1]);
@@ -173,6 +174,12 @@ public:
                 {
                     delay(250);
                     requestActuatorData();
+                }
+                else
+                {
+                    if (_cbTimeout != nullptr)
+                        (_cbTimeout)();
+                    Serial.printf("Retries Actuator Timeout");
                 }
                 retriesActuator++;
                 Serial.printf("Request Actuator Error: %d| Retrying...\n", request->responseHTTPcode());
