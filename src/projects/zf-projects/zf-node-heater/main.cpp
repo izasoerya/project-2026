@@ -57,7 +57,7 @@ void setup()
         Serial.print(WiFi.status());
         delay(500);
 
-        if (millis() - timestampConnect < 30000) // Timeout
+        if (millis() - timestampConnect > 30000) // Timeout
             ESP.restart();
     }
 
