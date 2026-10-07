@@ -4,11 +4,12 @@
 #include <ESPAsyncWebServer.h>
 #include <ElegantOTA.h>
 #include <WebSerial.h>
+#include <UniversalTelegramBot.h>
 
+#include "services/application.h"
 #include "services/request_job.h"
 #include "models/sensor.h"
 #include "models/actuator_mode.h"
-#include <UniversalTelegramBot.h>
 
 #define FLOOR_ID 2
 #define PIN_RELAY 5
@@ -18,43 +19,29 @@
 
 const char *ssid = "NodeSensorWiFi";
 const char *password = "muhammadnabiyullah";
-void automationTask(Actuator actuator);
+void automationActuatorCb(Actuator actuator);
 void timeoutActuatorCb();
 
 AsyncWebServer server(80);
-RequestJob req(FLOOR_ID, automationTask, timeoutActuatorCb);
+RequestJob req(FLOOR_ID, automationActuatorCb, timeoutActuatorCb);
 
 WiFiClientSecure wClient;
 UniversalTelegramBot bot(BOT_TOKEN, wClient);
 X509List cert(TELEGRAM_CERTIFICATE_ROOT);
 
-#define PIN_BUTTON D2 // GPIO4 - adjust if needed for your ESP Witty board
-
 volatile uint32_t lastButtonTime = 0;
 volatile bool buttonPressed = false;
-
-void IRAM_ATTR buttonISR()
-{
-    uint32_t now = millis();
-    if (now - lastButtonTime > 50)
-    {
-        if (digitalRead(PIN_BUTTON) == LOW)
-        {
-            buttonPressed = true;
-            lastButtonTime = now;
-        }
-    }
-}
 
 void setup()
 {
     Serial.begin(115200);
-    pinMode(PIN_RELAY, OUTPUT);
-    pinMode(PIN_G_LED, OUTPUT);
-    digitalWrite(PIN_RELAY, LOW);
-    digitalWrite(PIN_G_LED, LOW);
-    pinMode(PIN_BUTTON, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(PIN_BUTTON), buttonISR, CHANGE);
+
+    static ActuatorDriver actuatorDriver;
+    static ActuatorDriverContext driverCtx(actuatorDriver);
+    attachInterruptArg(digitalPinToInterrupt(GlobalConfig::PIN_BUTTON),
+                       Application::buttonISR,
+                       &driverCtx,
+                       CHANGE);
 
     WiFi.disconnect(true);
     WiFi.mode(WIFI_STA);
@@ -87,7 +74,7 @@ void setup()
     req.begin();
 }
 
-void automationTask(Actuator actuator)
+void automationActuatorCb(Actuator actuator)
 {
     bool prevData = actuator.state; // Active Low
     digitalWrite(PIN_RELAY, prevData);
