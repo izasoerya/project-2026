@@ -43,6 +43,9 @@ private:
 
     RequestType _reqType = RequestType::SENSOR;
     RequestState _reqState = RequestState::DONE;
+    uint8_t retriesSensor = 0;
+    uint8_t retriesActuator = 0;
+    uint8_t retriesActuatorMode = 0;
 
     asyncHTTPrequest _request;
     std::function<void(Actuator)> _cb;
@@ -61,7 +64,7 @@ public:
 
     void begin()
     {
-        _request.onReadyStateChange(cbRequest, (void *)this);
+        _request.onReadyStateChange(_cbRequest, (void *)this);
     }
 
     void requestSensorData()
@@ -113,7 +116,7 @@ public:
         _reqType = RequestType::TELEGRAM;
     }
 
-    void handleResponse(asyncHTTPrequest *request)
+    void _handleResponse(asyncHTTPrequest *request)
     {
         _reqState = RequestState::DONE;
         if (request->responseHTTPcode() == 200)
@@ -131,6 +134,7 @@ public:
 
             if (_reqType == RequestType::SENSOR)
             {
+                retriesSensor = 0;
                 Sensor sensorObject{
                     .id = doc["id"],
                     .floorId = doc["floor_entity_id"],
@@ -139,6 +143,7 @@ public:
             }
             else if (_reqType == RequestType::ACTUATOR)
             {
+                retriesActuator = 0;
                 JsonArray heaterArray = doc["heater_value"].as<JsonArray>();
                 bool heaterValue = heaterArray[0].as<bool>();
 
@@ -150,6 +155,7 @@ public:
             }
             else if (_reqType == RequestType::ACTUATOR_MODE)
             {
+                retriesActuatorMode = 0;
                 ActuatorMode modeObject{
                     .id = doc["id"],
                     .floorId = doc["floor_entity_id"],
@@ -160,15 +166,46 @@ public:
             _cb(_latestActuator);
         }
         else
-            Serial.printf("Req Error: %d\n", request->responseHTTPcode());
+        {
+            if (_reqType == RequestType::ACTUATOR)
+            {
+                if (retriesActuator < 5)
+                {
+                    delay(250);
+                    requestActuatorData();
+                }
+                retriesActuator++;
+                Serial.printf("Request Actuator Error: %d| Retrying...\n", request->responseHTTPcode());
+            }
+            if (_reqType == RequestType::ACTUATOR_MODE)
+            {
+                if (retriesActuatorMode < 5)
+                {
+                    delay(250);
+                    requestActuatorModeData();
+                }
+                retriesActuatorMode++;
+                Serial.printf("Request Actuator Mode Error: %d| Retrying...\n", request->responseHTTPcode());
+            }
+            if (_reqType == RequestType::SENSOR)
+            {
+                if (retriesSensor < 5)
+                {
+                    delay(250);
+                    requestSensorData();
+                }
+                retriesSensor++;
+                Serial.printf("Request Sensor Error: %d| Retrying...\n", request->responseHTTPcode());
+            }
+        }
     }
 
-    static void cbRequest(void *optParm, asyncHTTPrequest *request, int readyState)
+    static void _cbRequest(void *optParm, asyncHTTPrequest *request, int readyState)
     {
         if (readyState == 4)
         {
             RequestJob *self = (RequestJob *)optParm;
-            self->handleResponse(request);
+            self->_handleResponse(request);
         }
     }
 };

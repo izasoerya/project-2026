@@ -59,28 +59,19 @@ void setup()
     WiFi.mode(WIFI_STA);
     wClient.setTrustAnchors(&cert);
 
-    char hostname[64];
+    static char hostname[64];
     snprintf(hostname, sizeof(hostname), "zf-node-heater-%d", FLOOR_ID);
     WiFi.hostname(hostname);
-    unsigned char n = WiFi.scanNetworks();
-    for (unsigned char i = 0; i < n; i++)
-        Serial.printf("%d: %s (RSSI: %d)\n", i, WiFi.SSID(i).c_str(), WiFi.RSSI(i));
     WiFi.begin(ssid, password);
+    uint32_t timestampConnect = millis();
     while (WiFi.status() != WL_CONNECTED)
     {
         Serial.print(WiFi.status());
         delay(500);
+
+        if (millis() - timestampConnect < 30000) // Timeout
+            ESP.restart();
     }
-    configTime(3600 * 7, 0, "pool.ntp.org");
-    time_t now = time(nullptr);
-    int attempts = 0;
-    while (now < 24 * 3600 && attempts < 100) // While time < Jan 2, 1970
-    {
-        delay(100);
-        now = time(nullptr);
-        attempts++;
-    }
-    Serial.printf("Time synced: %s\n", ctime(&now));
 
     IPAddress localIP = WiFi.localIP();
     Serial.printf("Connected with IP: %d.%d.%d.%d\n", localIP[0], localIP[1], localIP[2], localIP[3]);
@@ -91,10 +82,6 @@ void setup()
     ElegantOTA.begin(&server);
     ElegantOTA.setAutoReboot(true);
     WebSerial.begin(&server, "/webserial");
-    WebSerial.onMessage(
-        [&](uint8_t *data, size_t len) {
-
-        });
 
     req.begin();
 }
