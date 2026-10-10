@@ -5,12 +5,15 @@
 #include <ElegantOTA.h>
 #include <WebSerial.h>
 
+#include "transmitter/configs/mqtt_module.h"
+
 #include "services/application.h"
 #include "services/request_job.h"
 #include "models/sensor.h"
 #include "models/actuator_mode.h"
 
 RequestJob *req = nullptr;
+MQTTModule mqttClient(GlobalConfig::usernameMQTT, GlobalConfig::passwordMQTT, GlobalConfig::brokerMQTT, 8883);
 
 void setup()
 {
@@ -54,6 +57,11 @@ void setup()
     req = new RequestJob(GlobalConfig::FLOOR_ID, [](Actuator act)
                          { Application::automationActuatorCb(act, &driverCtx); }, Application::timeoutActautorCb);
     req->begin();
+    if (mqttClient.connect())
+    {
+        Serial.println("Failed to connect MQTT, there will be no log timeout");
+        WebSerial.println("Failed to connect MQTT, there will be no log timeout");
+    }
 }
 
 void loop()
@@ -61,6 +69,7 @@ void loop()
     MDNS.update();
     ElegantOTA.loop();
     WebSerial.loop();
+    mqttClient.reconnect();
 
     static uint32_t prevLog = 0;
     if (millis() - prevLog > 1000)
