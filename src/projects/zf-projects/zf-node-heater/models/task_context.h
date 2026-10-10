@@ -10,4 +10,12 @@ struct ActuatorDriverContext
     ActuatorDriverContext(ActuatorDriver &d) : driver(d) {}
 };
 
+struct AutomationActuatorContext
+{
+    ActuatorDriver &driver;
+    MQTTModule &mqtt;
+
+    AutomationActuatorContext(ActuatorDriver &d, MQTTModule &m) : driver(d), mqtt(m) {}
+};
+
 #endif // TASK_CONTEXT_H
