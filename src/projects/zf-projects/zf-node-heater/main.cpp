@@ -54,14 +54,17 @@ void setup()
     ElegantOTA.setAutoReboot(true);
     WebSerial.begin(&server, "/webserial");
 
-    req = new RequestJob(GlobalConfig::FLOOR_ID, [](Actuator act)
-                         { Application::automationActuatorCb(act, &driverCtx); }, Application::timeoutActautorCb);
-    req->begin();
-    if (mqttClient.connect())
+    if (!mqttClient.connect())
     {
         Serial.println("Failed to connect MQTT, there will be no log timeout");
         WebSerial.println("Failed to connect MQTT, there will be no log timeout");
     }
+
+    static AutomationActuatorContext automationActuatorCtx(sharedActuatorDriver, mqttClient);
+    req = new RequestJob(GlobalConfig::FLOOR_ID, [](Actuator act)
+                         { Application::automationActuatorCb(act, &driverCtx); }, []()
+                         { Application::timeoutActautorCb(&automationActuatorCtx); });
+    req->begin();
 }
 
 void loop()
