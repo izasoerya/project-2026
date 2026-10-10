@@ -4,40 +4,20 @@
 #include <ESPAsyncWebServer.h>
 #include <ElegantOTA.h>
 #include <WebSerial.h>
-#include <UniversalTelegramBot.h>
 
 #include "services/application.h"
 #include "services/request_job.h"
 #include "models/sensor.h"
 #include "models/actuator_mode.h"
 
-#define FLOOR_ID 2
-#define PIN_RELAY 5
-#define PIN_G_LED 12
-#define BOT_TOKEN "8738540069:AAG1bONoND4JkHNQ_zHLFNh7c6MGEOITWoU"
-#define CHAT_ID "6720768632"
-
-const char *ssid = "NodeSensorWiFi";
-const char *password = "muhammadnabiyullah";
-void automationActuatorCb(Actuator actuator);
-void timeoutActuatorCb();
-
-AsyncWebServer server(80);
-RequestJob req(FLOOR_ID, automationActuatorCb, timeoutActuatorCb);
-
-WiFiClientSecure wClient;
-UniversalTelegramBot bot(BOT_TOKEN, wClient);
-X509List cert(TELEGRAM_CERTIFICATE_ROOT);
-
-volatile uint32_t lastButtonTime = 0;
-volatile bool buttonPressed = false;
+RequestJob *req = nullptr;
 
 void setup()
 {
     Serial.begin(115200);
 
-    static ActuatorDriver actuatorDriver;
-    static ActuatorDriverContext driverCtx(actuatorDriver);
+    static ActuatorDriver sharedActuatorDriver;
+    static ActuatorDriverContext driverCtx(sharedActuatorDriver);
     attachInterruptArg(digitalPinToInterrupt(GlobalConfig::PIN_BUTTON),
                        Application::buttonISR,
                        &driverCtx,
@@ -45,12 +25,11 @@ void setup()
 
     WiFi.disconnect(true);
     WiFi.mode(WIFI_STA);
-    wClient.setTrustAnchors(&cert);
 
     static char hostname[64];
-    snprintf(hostname, sizeof(hostname), "zf-node-heater-%d", FLOOR_ID);
+    snprintf(hostname, sizeof(hostname), "zf-node-heater-%d", GlobalConfig::FLOOR_ID);
     WiFi.hostname(hostname);
-    WiFi.begin(ssid, password);
+    WiFi.begin(GlobalConfig::ssid, GlobalConfig::password);
     uint32_t timestampConnect = millis();
     while (WiFi.status() != WL_CONNECTED)
     {
@@ -66,35 +45,15 @@ void setup()
     MDNS.begin(hostname);
     MDNS.addService("http", "tcp", 80);
 
+    static AsyncWebServer server(80);
     server.begin();
     ElegantOTA.begin(&server);
     ElegantOTA.setAutoReboot(true);
     WebSerial.begin(&server, "/webserial");
 
-    req.begin();
-}
-
-void automationActuatorCb(Actuator actuator)
-{
-    bool prevData = actuator.state; // Active Low
-    digitalWrite(PIN_RELAY, prevData);
-    bool actualValue = digitalRead(PIN_RELAY);
-    if (prevData != actualValue)
-    {
-        Serial.println("Discrepancy output detected!");
-        WebSerial.println("Discrepancy output detected!");
-        bot.sendMessage(CHAT_ID, "Discrepancy output detected!", "");
-    }
-
-    Serial.printf("RELAY: %s\n", actualValue ? "ON" : "OFF");
-    WebSerial.printf("RELAY: %s\n", actualValue ? "ON" : "OFF");
-}
-
-void timeoutActuatorCb()
-{
-    static char buffer[64];
-    snprintf(buffer, sizeof(buffer), "Node Heater-%d Timeout Fetch Actuator", FLOOR_ID);
-    bot.sendMessage(CHAT_ID, buffer, "");
+    req = new RequestJob(GlobalConfig::FLOOR_ID, [](Actuator act)
+                         { Application::automationActuatorCb(act, &driverCtx); }, Application::timeoutActautorCb);
+    req->begin();
 }
 
 void loop()
@@ -102,16 +61,6 @@ void loop()
     MDNS.update();
     ElegantOTA.loop();
     WebSerial.loop();
-
-    if (buttonPressed)
-    {
-        buttonPressed = false;
-        digitalWrite(PIN_RELAY, !digitalRead(PIN_RELAY));
-        digitalWrite(PIN_G_LED, !digitalRead(PIN_G_LED));
-
-        Serial.printf("Manual button relay: %d\n", digitalRead(PIN_RELAY));
-        WebSerial.printf("Manual button relay: %d\n", digitalRead(PIN_RELAY));
-    }
 
     static uint32_t prevLog = 0;
     if (millis() - prevLog > 1000)
@@ -126,6 +75,6 @@ void loop()
     if (millis() - prevAutomation > 20000)
     {
         prevAutomation = millis();
-        req.requestActuatorData();
+        req->requestActuatorData();
     }
 }

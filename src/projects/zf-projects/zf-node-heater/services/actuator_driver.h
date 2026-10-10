@@ -21,6 +21,7 @@ public:
     void controlActuator(bool on)
     {
         digitalWrite(GlobalConfig::PIN_HEATER_RELAY, on);
+        digitalWrite(GlobalConfig::PIN_GREEN_LED, on);
     }
 
     bool getActuatorState()

@@ -5,10 +5,14 @@
 
 namespace GlobalConfig
 {
+    constexpr uint8_t FLOOR_ID = 2;
+
+    constexpr const char *ssid = "Subhanallah";
+    constexpr const char *password = "muhammadnabiyullah";
+
     constexpr uint8_t PIN_BUTTON = 4;
     constexpr uint8_t PIN_GREEN_LED = 12;
     constexpr uint8_t PIN_HEATER_RELAY = 5;
-
 };
 
 #endif // GLOBAL_DEFINITION_H
