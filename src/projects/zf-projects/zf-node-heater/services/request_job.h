@@ -151,7 +151,7 @@ public:
                 Actuator actuatorObject{
                     .id = doc["id"],
                     .floorId = doc["floor_entity_id"],
-                    .state = retriesActuator > 5 ? false : heaterValue};
+                    .state = heaterValue};
                 _latestActuator = actuatorObject;
             }
             else if (_reqType == RequestType::ACTUATOR_MODE)
@@ -180,6 +180,9 @@ public:
                     if (_cbTimeout != nullptr)
                         (_cbTimeout)();
                     Serial.printf("Retries Actuator Timeout");
+
+                    _latestActuator.state = false;
+                    _cb(_latestActuator); // Safety mechanism, turn off relay when on timeout
                 }
                 retriesActuator++;
                 Serial.printf("Request Actuator Error: %d| Retrying...\n", request->responseHTTPcode());
