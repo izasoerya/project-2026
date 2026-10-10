@@ -151,7 +151,7 @@ public:
                 Actuator actuatorObject{
                     .id = doc["id"],
                     .floorId = doc["floor_entity_id"],
-                    .state = heaterValue};
+                    .state = retriesActuator > 5 ? false : heaterValue};
                 _latestActuator = actuatorObject;
             }
             else if (_reqType == RequestType::ACTUATOR_MODE)
