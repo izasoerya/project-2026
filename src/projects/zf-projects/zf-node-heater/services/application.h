@@ -41,13 +41,17 @@ public:
         WebSerial.printf("RELAY: %s\n", actualValue ? "ON" : "OFF");
     }
 
-    static void timeoutActautorCb()
+    static void timeoutActautorCb(void *pvParam)
     {
+        AutomationActuatorContext *ctx = static_cast<AutomationActuatorContext *>(pvParam);
+
         static char buffer[64];
         snprintf(buffer, sizeof(buffer), "Node Heater-%d Timeout Fetch Actuator", GlobalConfig::FLOOR_ID);
 
         Serial.println(buffer);
         WebSerial.println(buffer);
+        if (ctx->mqtt.isConnected())
+            ctx->mqtt.publish("TELEGRAM", buffer);
     }
 };
 
