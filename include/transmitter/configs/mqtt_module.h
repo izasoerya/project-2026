@@ -7,79 +7,276 @@
 #include <ESP8266WiFi.h>
 #endif
 
-#include <PubSubClient.h>
+#include <WebSocketsClient.h>
+#include <MQTTPubSubClient.h>
 #include <WiFiClientSecure.h>
 #include "../base_transmitter.h"
 
-class MQTTModule
+class BaseMQTT
 {
 private:
-    static const uint8_t _qos = 0;
-    static const bool _retain = false;
-
     const char *_username;
     const char *_password;
     const char *_brokerUrl;
     const uint16_t _port;
 
-    WiFiClientSecure _wifiClient;
-    PubSubClient _mqttClient;
-
-    void (*_userCallback)(const char *topic, const char *payload) = nullptr;
-
-public:
-    MQTTModule(
-        const char *username, const char *password, const char *brokerUrl, const uint16_t port)
-        : _username(username), _password(password), _brokerUrl(brokerUrl), _port(port),
-          _mqttClient(_wifiClient)
-    {
-        _wifiClient.setInsecure();
-        _mqttClient.setServer(_brokerUrl, _port);
-    }
-    ~MQTTModule() = default;
-
-    bool isConnected() { return _mqttClient.connected(); }
-
-    bool connect()
-    {
-        bool result = _mqttClient.connect("ESP32Client", _username, _password);
-        if (!result)
-        {
-            Serial.printf("MQTT connect failed. State: %d\n", _mqttClient.state());
-            // State codes: -4=CONNECT_FAILED, -3=CONNECT_BAD_PROTOCOL, -2=CONNECT_BAD_CLIENT_ID
-            //              -1=CONNECT_UNAVAILABLE, 0=CONNECT_BAD_CREDENTIALS, 1=CONNECTED
-        }
-        return result;
-    }
-
-    bool reconnect()
-    {
-        if (_mqttClient.connect("ESP32Client", _username, _password))
-            return true;
-        return false;
-    }
-
-    bool disconnect()
+protected:
+    MQTTPubSubClient _mqttClient;
+    bool _connectToMQTT(const char *username, const char *password, const char *id = "default-client")
     {
         _mqttClient.disconnect();
+        uint32_t startAttempt = millis();
+        startAttempt = millis();
+        while (!_mqttClient.connect(id, username, password))
+        {
+            if (millis() - startAttempt > 5000) // 5 second before timeout
+            {
+                Serial.printf("Timeout connect to mqtt with username: %s, password: %s\n", username, password);
+                return false;
+            }
+        }
         return true;
     }
 
-    void onMessage(void (*_msgCallback)(const char *topic, const char *payload))
+public:
+    BaseMQTT(
+        const char *brokerUrl, const uint16_t port)
+        : _brokerUrl(brokerUrl), _port(port) {}
+
+    BaseMQTT(
+        const char *brokerUrl, const uint16_t port,
+        const char *username, const char *password)
+        : _username(username), _password(password), _brokerUrl(brokerUrl), _port(port) {}
+
+    ~BaseMQTT() = default;
+
+    const char *getBrokerUrl() { return _brokerUrl; }
+    uint16_t getPort() { return _port; }
+    const char *getUsername() { return _username; }
+    const char *getPassword() { return _password; }
+
+    bool isConnected() { return _mqttClient.isConnected(); }
+    bool disconnect() { return _mqttClient.disconnect(); }
+    virtual bool poll() { return _mqttClient.update(); }
+
+    virtual bool connect(const char *username, const char *password, const char *id = "default-client") = 0;
+
+    virtual bool connect(const char *id = "default-client") = 0;
+
+    void subscribe(const char *topic, std::function<void(const char *payload, const size_t size)> cb)
     {
-        _userCallback = _msgCallback;
-        _mqttClient.setCallback([this](char *topic, byte *payload, unsigned int length)
-                                {
-            char buffer[length + 1];
-            memcpy(buffer, payload, length);
-            buffer[length] = '\0';
-            if (_userCallback)
-                _userCallback(topic, buffer); });
+        _mqttClient.subscribe(topic, cb);
     }
 
-    uint16_t publish(const char *topic, const char *msg)
+    uint16_t publish(const char *topic, const char *msg, bool retain = false, uint8_t qos = 0)
     {
-        return _mqttClient.publish(topic, msg, _retain) ? 1 : 0;
+        return _mqttClient.publish(topic, msg, retain, qos);
+    }
+};
+
+class MQTTBasic : public BaseMQTT
+{
+private:
+    WiFiClient _wClient;
+
+public:
+    MQTTBasic(
+        const char *brokerUrl, const uint16_t port)
+        : BaseMQTT(brokerUrl, port) {}
+
+    MQTTBasic(
+        const char *brokerUrl, const uint16_t port,
+        const char *username, const char *password)
+        : BaseMQTT(brokerUrl, port, username, password) {}
+
+    ~MQTTBasic() = default;
+
+    bool connect(const char *username, const char *password, const char *id = "default-client") override
+    {
+        if (WiFi.status() != WL_CONNECTED)
+            return false;
+
+        _wClient.stop();
+        uint32_t startAttempt = millis();
+        while (!_wClient.connect(getBrokerUrl(), getPort()))
+        {
+            if (millis() - startAttempt > 5000) // 5 second before timeout
+                return false;
+        }
+        _connectToMQTT(id, username, password);
+    }
+
+    bool connect(const char *id = "default-client")
+    {
+        if (WiFi.status() != WL_CONNECTED)
+            return false;
+
+        _wClient.stop();
+        uint32_t startAttempt = millis();
+        while (!_wClient.connect(getBrokerUrl(), getPort()))
+        {
+            if (millis() - startAttempt > 5000) // 5 second before timeout
+                return false;
+        }
+        _connectToMQTT(id, getUsername(), getPassword());
+    }
+};
+
+class MQTTSecure : public BaseMQTT
+{
+private:
+    WiFiClientSecure _wClient;
+
+public:
+    MQTTSecure(
+        const char *brokerUrl, const uint16_t port)
+        : BaseMQTT(brokerUrl, port)
+    {
+        _wClient.setInsecure();
+    }
+
+    MQTTSecure(
+        const char *brokerUrl, const uint16_t port,
+        const char *username, const char *password)
+        : BaseMQTT(brokerUrl, port, username, password) {}
+
+    ~MQTTSecure() = default;
+
+    void setCert(const char *root_ca)
+    {
+        _wClient.setCACert(root_ca);
+    }
+
+    bool connect(const char *username, const char *password, const char *id = "default-client") override
+    {
+        if (WiFi.status() != WL_CONNECTED)
+            return false;
+
+        _wClient.stop();
+        uint32_t startAttempt = millis();
+        while (!_wClient.connect(getBrokerUrl(), getPort()))
+        {
+            if (millis() - startAttempt > 5000) // 5 second before timeout
+                return false;
+        }
+        return _connectToMQTT(id, username, password);
+    }
+
+    bool connect(const char *id = "default-client")
+    {
+        if (WiFi.status() != WL_CONNECTED)
+            return false;
+
+        _wClient.stop();
+        uint32_t startAttempt = millis();
+        while (!_wClient.connect(getBrokerUrl(), getPort()))
+        {
+            if (millis() - startAttempt > 5000) // 5 second before timeout
+                return false;
+        }
+        return _connectToMQTT(id, getUsername(), getPassword());
+    }
+};
+
+class MQTTWebsocket : public BaseMQTT
+{
+private:
+    WebSocketsClient _wsclient;
+
+public:
+    MQTTWebsocket(
+        const char *brokerUrl, const uint16_t port)
+        : BaseMQTT(brokerUrl, port) {}
+
+    MQTTWebsocket(
+        const char *brokerUrl, const uint16_t port,
+        const char *username, const char *password)
+        : BaseMQTT(brokerUrl, port, username, password) {}
+
+    ~MQTTWebsocket() = default;
+
+    bool connect(const char *username, const char *password, const char *id = "default-client") override
+    {
+        if (WiFi.status() != WL_CONNECTED)
+            return false;
+
+        _wsclient.disconnect();
+        _wsclient.begin(getBrokerUrl(), getPort(), "/mqtt", "mqtt");
+        _wsclient.setReconnectInterval(2000);
+        _mqttClient.begin(_wsclient);
+
+        return _connectToMQTT(id, username, password);
+    }
+
+    bool connect(const char *id = "default-client")
+    {
+        if (WiFi.status() != WL_CONNECTED)
+            return false;
+
+        _wsclient.disconnect();
+        _wsclient.begin(getBrokerUrl(), getPort(), "/mqtt", "mqtt");
+        _wsclient.setReconnectInterval(2000);
+        _mqttClient.begin(_wsclient);
+
+        return _connectToMQTT(id, getUsername(), getPassword());
+    }
+
+    bool poll() override
+    {
+        _wsclient.loop();
+        return _mqttClient.update();
+    }
+};
+
+class MQTTWebsocketSecure : public BaseMQTT
+{
+private:
+    WebSocketsClient _wsclient;
+
+public:
+    MQTTWebsocketSecure(
+        const char *brokerUrl, const uint16_t port)
+        : BaseMQTT(brokerUrl, port) {}
+
+    MQTTWebsocketSecure(
+        const char *brokerUrl, const uint16_t port,
+        const char *username, const char *password)
+        : BaseMQTT(brokerUrl, port, username, password) {}
+
+    ~MQTTWebsocketSecure() = default;
+
+    bool connect(const char *username, const char *password, const char *id = "default-client") override
+    {
+        if (WiFi.status() != WL_CONNECTED)
+            return false;
+
+        _wsclient.disconnect();
+        // TODO: METHOD CONNECT TO WS WITH CERT
+        _wsclient.beginSSL(getBrokerUrl(), getPort(), "/mqtt", "", "mqtt");
+        _wsclient.setReconnectInterval(2000);
+        _mqttClient.begin(_wsclient);
+
+        return _connectToMQTT(username, password, id);
+    }
+
+    bool connect(const char *id = "default-client")
+    {
+        if (WiFi.status() != WL_CONNECTED)
+            return false;
+
+        _wsclient.disconnect();
+        // TODO: METHOD CONNECT TO WS WITH CERT
+        _wsclient.beginSSL(getBrokerUrl(), getPort(), "/mqtt", "", "mqtt");
+        _wsclient.setReconnectInterval(2000);
+        _mqttClient.begin(_wsclient);
+
+        return _connectToMQTT(id, getUsername(), getPassword());
+    }
+
+    bool poll() override
+    {
+        _wsclient.loop();
+        return _mqttClient.update();
     }
 };
 
