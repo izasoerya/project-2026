@@ -6,18 +6,25 @@
 namespace GlobalConfig
 {
     constexpr uint8_t deviceID = 1;
-    constexpr uint32_t DELAY_SAMPLING = 30000;
+    constexpr uint32_t DELAY_SAMPLING = 10000;
     constexpr uint32_t DELAY_TX = 60000;
 
     constexpr const char *ssid = "Subhanallah";
     constexpr const char *password = "muhammadnabiyullah";
     constexpr const char *hostname = "BRIN-WTQ-DL";
 
-    constexpr const char *usernameMqtt = "test2";
-    constexpr const char *passwordMqtt = "test";
-    constexpr const char *brokerMqtt = "n12f87fb.ala.eu-central-1.emqxsl.com";
-    constexpr const uint16_t portMqtt = 8883;
-    constexpr const char *SENSOR_TOPIC = "sensor";
+    constexpr const char *USERNAME_MQTT = "device_tester_water_sukawesi";
+    constexpr const char *PASSWORD_MQTT = "7d4a91651108b30afb438f24f3b8b3b15abfe20d6a35c0c3";
+    constexpr const char *BROKER_MQTT = "monitoring.pantaudas.cloud";
+    constexpr const uint16_t PORT_MQTT = 443;
+
+    constexpr const char *SENSOR_TOPIC = "devices/tester-water-sukawesi/data";
+    constexpr const char *CMD_TOPIC = "devices/tester-water-sukawesi/cmd";
+    constexpr const char *CMD_RESPONSE_TOPIC = "devices/tester-water-sukawesi/ota-water-sukawesi/ack";
+    constexpr const char *OTA_TOPIC = "devices/tester-water-sukawesi/ota-water-sukawesi/ota";
+    constexpr const char *OTA_RESPONSE_TOPIC = "devices/tester-water-sukawesi/ota-water-sukawesi/ota/status";
+    constexpr const char *PING_TOPIC = "devices/tester-water-sukawesi/ping";
+    constexpr const char *PING_RESPONSE_TOPIC = "devices/tester-water-sukawesi/pong";
 
     constexpr HardwareSerial &mbSerial = Serial1;
 };
