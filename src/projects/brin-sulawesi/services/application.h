@@ -20,14 +20,15 @@ public:
         while (WiFi.status() != WL_CONNECTED)
             ctx->wifi.begin(false); // BLOCKING TIMEOUT 20S
 
-        MQTTModule mqtt(
-            GlobalConfig::usernameMqtt,
-            GlobalConfig::passwordMqtt,
-            GlobalConfig::brokerMqtt,
-            GlobalConfig::portMqtt);
-        bool isMQTTConnected = mqtt.connect(); // BLOCKING TIMEOUT 20S
-        if (mqtt.connect())
-            return mqtt.publish(payload.topic, payload.message) != 0;
+        MQTTWebsocketSecure mqtt(GlobalConfig::BROKER_MQTT, GlobalConfig::PORT_MQTT);
+        bool isMQTTConnected = mqtt.connect(GlobalConfig::USERNAME_MQTT, GlobalConfig::PASSWORD_MQTT); // BLOCKING TIMEOUT 20S
+        mqtt.poll();
+        if (isMQTTConnected)
+        {
+            Serial.println("MQTT Connected");
+            return mqtt.publish(payload.topic, payload.message);
+        }
+        Serial.println("MQTT Failed to Connect");
         return false;
     }
 
