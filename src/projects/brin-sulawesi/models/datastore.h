@@ -27,10 +27,19 @@ struct SensorObject
     {
         static JsonDocument doc;
         doc["turbidity"] = turbidity;
-        doc["level"] = awlr;
+        doc["tinggi_muka_air"] = awlr;
         doc["battery"] = battery;
         static char buffer[64];
         serializeJson(doc, buffer);
+        return buffer;
+    }
+
+    const char *toCSV()
+    {
+        static char buffer[128];
+        snprintf(buffer, sizeof(buffer),
+                 "%.6f,%.6f,%.1f,%.1f,%.1f,%d",
+                 -7.8367746, 110.3421102, turbidity, awlr, battery, 1);
         return buffer;
     }
 };
