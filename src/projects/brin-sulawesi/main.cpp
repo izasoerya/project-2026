@@ -10,7 +10,7 @@
 
 void setup()
 {
-    esp_sleep_enable_timer_wakeup(GlobalConfig::DELAY_SAMPLING * 1000ULL); // Configure sleep for 30s
+    esp_sleep_enable_timer_wakeup(GlobalConfig::DELAY_SAMPLING * 1000ULL); // Configure sleep for 10s
     Preferences prefs;
     prefs.begin("app_config", true);
     const uint8_t firmwareId = prefs.getUChar("id", 0);
@@ -44,7 +44,7 @@ void setup()
 
     static WiFiModule inet(
         GlobalConfig::ssid, GlobalConfig::password, GlobalConfig::hostname,
-        wifi_power_t::WIFI_POWER_19_5dBm);
+        wifi_power_t::WIFI_POWER_8_5dBm);
     static NetworkingContext networkCtx(inet);
 
     FSMKernel kernel = FSMKernel(&sensorCtx, &networkCtx);
