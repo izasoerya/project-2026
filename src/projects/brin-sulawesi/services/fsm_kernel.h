@@ -8,6 +8,8 @@
 class FSMKernel
 {
 private:
+    const bool IS_MILLIS = true;
+
     ApplicationState _state = ApplicationState::SAMPLING_STATE;
     SensorContext *_sensorCtx;
     NetworkingContext *_netCtx;
@@ -38,27 +40,33 @@ public:
 
             SensorObject sensorData = Application::samplingTask(_sensorCtx);
             Application::sensorAgregatorTask(sensorData, false);
-            Serial.printf("Sampling Data: %s\n", sensorData.toString());
+            Serial.printf("[INFO] Sampling: %s\n", sensorData.toString());
+            Preferences prefs;
+            prefs.begin("app_config", true);
+            const String currentVersion = prefs.getString("version", "");
+            Serial.printf("Current ver: %s\n", currentVersion);
             _cycle++;
 
-            esp_light_sleep_start();
+            if (!IS_MILLIS)
+                esp_light_sleep_start();
+            else
+                delay(10000);
         }
         else if (_state == ApplicationState::PUBLISH_STATE)
         {
             SensorObject sensorData = Application::samplingTask(_sensorCtx);
             SensorObject snapshot = Application::sensorAgregatorTask(sensorData, true);
             MqttPayload payload = MqttPayload{
-                .topic = "sensor",
-                .message = snapshot.toJson()};
+                .topic = GlobalConfig::SENSOR_TOPIC,
+                .message = snapshot.toCSV()};
 
             const uint32_t attemptedTimestamp = millis();
             bool isPublishSuccess = false;
-            while (!isPublishSuccess && millis() - attemptedTimestamp < 5000)
+            while (!isPublishSuccess && millis() - attemptedTimestamp < 15000)
             {
                 isPublishSuccess = Application::networkingTask(_netCtx, payload);
                 if (isPublishSuccess)
                 {
-                    Serial.printf("Success Publish: %s\n", payload.message);
                     Application::sensorAgregatorTask({0.0f, 0.0f, 0.0f}, true);
                     _cycle = 0;
                 }
@@ -67,7 +75,7 @@ public:
 
             if (!isPublishSuccess)
             {
-                Serial.println("Publish mqtt timed out");
+                Serial.println("[ERROR] Publish mqtt timed out");
                 _cycle = 0;
             }
         }
