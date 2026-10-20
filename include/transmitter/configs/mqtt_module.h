@@ -21,7 +21,7 @@ private:
     const uint16_t _port;
 
 protected:
-    MQTTPubSubClient _mqttClient;
+    MQTTPubSub::PubSubClient<768> _mqttClient;
     bool _connectToMQTT(const char *username, const char *password, const char *id = "default-client")
     {
         _mqttClient.disconnect();
@@ -63,12 +63,12 @@ public:
 
     virtual bool connect(const char *id = "default-client") = 0;
 
-    void subscribe(const char *topic, std::function<void(const char *payload, const size_t size)> cb)
+    bool subscribe(const char *topic, std::function<void(const char *payload, const size_t size)> cb)
     {
-        _mqttClient.subscribe(topic, cb);
+        return _mqttClient.subscribe(topic, cb);
     }
 
-    uint16_t publish(const char *topic, const char *msg, bool retain = false, uint8_t qos = 0)
+    bool publish(const char *topic, const char *msg, bool retain = false, uint8_t qos = 0)
     {
         return _mqttClient.publish(topic, msg, retain, qos);
     }
