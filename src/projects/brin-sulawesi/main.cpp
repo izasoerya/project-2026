@@ -33,14 +33,20 @@ void setup()
 
     static Modbustatics *turbSensor = nullptr;
     static Modbustatics *awlrSensor = nullptr;
-    for (int i = 0; i < sizeof(turb_list); i++)
+    static INA226Sensor *inaAccuSensor = nullptr;
+    static INA226Sensor *inaSolarSensor = nullptr;
+    for (size_t i = 0; i < sizeof(turb_list) / sizeof(turb_list[0]); i++)
     {
-        if (turb_list[i].getId() == firmwareId)
+        if ((turb_list[i].getId() - 10) == firmwareId) // Turbidity id start from 11
             turbSensor = &turb_list[i];
-        if (awlr_list[i].getId() == firmwareId)
+        if ((awlr_list[i].getId() - 0) == firmwareId) // AWLR id start from 1
             awlrSensor = &awlr_list[i];
+        if ((ina_accu_list[i].getId() - 0) == firmwareId) // AWLR id start from 1
+            inaAccuSensor = &ina_accu_list[i];
+        if ((ina_solar_list[i].getId() - 0) == firmwareId) // AWLR id start from 1
+            inaSolarSensor = &ina_solar_list[i];
     }
-    static SensorContext sensorCtx(*turbSensor, *awlrSensor);
+    static SensorContext sensorCtx(*turbSensor, *awlrSensor, *inaAccuSensor, *inaSolarSensor);
 
     static WiFiModule inet(
         GlobalConfig::ssid, GlobalConfig::password, GlobalConfig::hostname,

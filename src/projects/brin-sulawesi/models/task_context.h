@@ -1,8 +1,8 @@
 #if !defined(SHARED_MODBUS_OBJECT_H)
 #define SHARED_MODBUS_OBJECT_H
 
-#include <freertos/semphr.h>
 #include <sensor/configs/modbus_sensor.h>
+#include "sensor/configs/ina226_sensor.h"
 #include "../services/appstate_parser.h"
 #include "../models/profile.h"
 #include "transmitter/configs/mqtt_module.h"
@@ -16,10 +16,16 @@ struct FeatureState
 
 struct SensorContext
 {
+    const uint8_t PIN_SDA = 6;
+    const uint8_t PIN_SCL = 7;
+
     Modbustatics &turbidity;
     Modbustatics &awlr;
+    INA226Sensor &accuINA;
+    INA226Sensor &solarINA;
 
-    SensorContext(Modbustatics &t, Modbustatics &l) : turbidity(t), awlr(l) {}
+    SensorContext(Modbustatics &t, Modbustatics &l, INA226Sensor &accu, INA226Sensor &solar)
+        : turbidity(t), awlr(l), accuINA(accu), solarINA(solar) {}
 };
 
 struct NetworkingContext

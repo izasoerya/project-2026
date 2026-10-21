@@ -4,6 +4,7 @@
 #define SENSOR_LIST_H
 
 #include "sensor/configs/modbus_sensor.h"
+#include "sensor/configs/ina226_sensor.h"
 #include "sensor/filters/moving_average.h"
 
 /**
@@ -117,5 +118,31 @@ static Modbustatics turb_list[9] = {
         return v; 
     })
 };
+
+static INA226Sensor ina_accu_list[9] = {
+    INA226Sensor (1, "Accu voltage & current", &Wire, 0x04),
+    INA226Sensor (2, "Accu voltage & current", &Wire, 0x04),
+    INA226Sensor (3, "Accu voltage & current", &Wire, 0x04),
+    INA226Sensor (4, "Accu voltage & current", &Wire, 0x04),
+    INA226Sensor (5, "Accu voltage & current", &Wire, 0x04),
+    INA226Sensor (6, "Accu voltage & current", &Wire, 0x04),
+    INA226Sensor (7, "Accu voltage & current", &Wire, 0x04),
+    INA226Sensor (8, "Accu voltage & current", &Wire, 0x04),
+    INA226Sensor (9, "Accu voltage & current", &Wire, 0x04),
+};
+
+static INA226Sensor ina_solar_list[9] = {
+    INA226Sensor (1, "Solar panel voltage & current", &Wire, 0x05),
+    INA226Sensor (2, "Solar panel voltage & current", &Wire, 0x05),
+    INA226Sensor (3, "Solar panel voltage & current", &Wire, 0x05),
+    INA226Sensor (4, "Solar panel voltage & current", &Wire, 0x05),
+    INA226Sensor (5, "Solar panel voltage & current", &Wire, 0x05),
+    INA226Sensor (6, "Solar panel voltage & current", &Wire, 0x05),
+    INA226Sensor (7, "Solar panel voltage & current", &Wire, 0x05),
+    INA226Sensor (8, "Solar panel voltage & current", &Wire, 0x05),
+    INA226Sensor (9, "Solar panel voltage & current", &Wire, 0x05),
+};
+
+
 
 #endif // SENSOR_LIST_H

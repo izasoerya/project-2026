@@ -151,43 +151,15 @@ public:
         // if (resAwlr.isOk())
         //     waterLevel = resAwlr.value;
 
+        // Wire.begin(PIN_SDA, PIN_SCL);
+        // accuINA.begin();
+        // solarINA.begin();
+
         static SensorObject sensor = SensorObject{
             .turbidity = 10,
             .awlr = 22,
             .battery = 2.3};
         return sensor;
-    }
-
-    static void calibrateTask(void *pvParam)
-    {
-        const size_t MAX_WINDOW = 30;
-        uint8_t counter = 0;
-        uint16_t val[MAX_WINDOW];
-
-        ApplicationContext *ctx = static_cast<ApplicationContext *>(pvParam);
-        while (1)
-        {
-            if (ctx->state == AppState::CALIBRATE_TURBIDITY)
-            {
-                val[counter] = ctx->mbTurbidity->read();
-                counter++;
-            }
-            else if (ctx->state == AppState::CALIBRATE_ARR)
-            {
-                val[counter] = ctx->mbAwlr->read();
-                counter++;
-            }
-
-            if (counter >= 30)
-            {
-                Serial.print("array = [");
-                for (uint8_t i = 0; i < MAX_WINDOW; i++)
-                    Serial.printf("%d, ", val[i]);
-                Serial.println("]");
-                counter = 0;
-            }
-            vTaskDelay(50 / portTICK_PERIOD_MS);
-        }
     }
 };
 
