@@ -11,8 +11,8 @@ namespace GlobalConfig
     constexpr float BATTERY_DANGER = 11.5;
     constexpr float BATTERY_WARNING = 11.8;
 
-    constexpr const char *ssid = "faizareborn";
-    constexpr const char *password = "faiza221977";
+    constexpr const char *ssid = "Subhanallah";
+    constexpr const char *password = "muhammadnabiyullah";
     constexpr const char *hostname = "BRIN-WTQ-DL";
 
     constexpr const char *USERNAME_MQTT = "device_tester_water_sukawesi";
