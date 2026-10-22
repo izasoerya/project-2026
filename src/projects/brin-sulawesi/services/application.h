@@ -102,41 +102,6 @@ public:
         return false;
     }
 
-    static SensorObject sensorAgregatorTask(SensorObject sensor, bool resetBuffer)
-    {
-        static SensorObject sensorDatapoints[32];
-        static uint8_t arrayPointer = 0;
-
-        if (!resetBuffer && arrayPointer < 32)
-            sensorDatapoints[arrayPointer++] = sensor;
-
-        float avgTurbidity = 0.0f;
-        float avgAwlr = 0.0f;
-        float avgBattery = 0.0f;
-        for (uint8_t i = 0; i < arrayPointer; ++i)
-        {
-            avgTurbidity += sensorDatapoints[i].turbidity;
-            avgAwlr += sensorDatapoints[i].awlr;
-            avgBattery += sensorDatapoints[i].battery;
-        }
-        SensorObject avgSensor = {0.0f, 0.0f, 0.0f};
-        if (arrayPointer > 0)
-        {
-            avgSensor = SensorObject{
-                .turbidity = avgTurbidity / arrayPointer,
-                .awlr = avgAwlr / arrayPointer,
-                .battery = avgBattery / arrayPointer,
-            };
-        }
-
-        if (resetBuffer)
-        {
-            memset(sensorDatapoints, 0, sizeof(sensorDatapoints));
-            arrayPointer = 0;
-        }
-        return avgSensor;
-    }
-
     static SensorObject samplingTask(void *pvParam)
     {
         SensorContext *ctx = static_cast<SensorContext *>(pvParam);
