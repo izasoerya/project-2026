@@ -21,10 +21,10 @@ struct SensorContext
 
     Modbustatics &turbidity;
     Modbustatics &awlr;
-    INA226Sensor &accuINA;
-    INA226Sensor &solarINA;
+    INA226SensorInterface &accuINA;
+    INA226SensorInterface &solarINA;
 
-    SensorContext(Modbustatics &t, Modbustatics &l, INA226Sensor &accu, INA226Sensor &solar)
+    SensorContext(Modbustatics &t, Modbustatics &l, INA226SensorInterface &accu, INA226SensorInterface &solar)
         : turbidity(t), awlr(l), accuINA(accu), solarINA(solar) {}
 };
 

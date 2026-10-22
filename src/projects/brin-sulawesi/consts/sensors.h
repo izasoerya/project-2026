@@ -7,6 +7,9 @@
 #include "sensor/configs/ina226_sensor.h"
 #include "sensor/filters/moving_average.h"
 
+// Switch this alias to MockINA226Sensor for hardware-independent testing.
+using SelectedINA226Sensor = INA226Sensor;
+
 /**
  * @brief TODO: Create a protocol to send calibration to modbus slave device
  * 
@@ -119,28 +122,28 @@ static Modbustatics turb_list[9] = {
     })
 };
 
-static INA226Sensor ina_accu_list[9] = {
-    INA226Sensor (1, "Accu voltage & current", &Wire, 0x04),
-    INA226Sensor (2, "Accu voltage & current", &Wire, 0x04),
-    INA226Sensor (3, "Accu voltage & current", &Wire, 0x04),
-    INA226Sensor (4, "Accu voltage & current", &Wire, 0x04),
-    INA226Sensor (5, "Accu voltage & current", &Wire, 0x04),
-    INA226Sensor (6, "Accu voltage & current", &Wire, 0x04),
-    INA226Sensor (7, "Accu voltage & current", &Wire, 0x04),
-    INA226Sensor (8, "Accu voltage & current", &Wire, 0x04),
-    INA226Sensor (9, "Accu voltage & current", &Wire, 0x04),
+static SelectedINA226Sensor ina_accu_list[9] = {
+    SelectedINA226Sensor (1, "Accu voltage & current", &Wire, 0x04, INA226Measurement::BUS_VOLTAGE),
+    SelectedINA226Sensor (2, "Accu voltage & current", &Wire, 0x04, INA226Measurement::BUS_VOLTAGE),
+    SelectedINA226Sensor (3, "Accu voltage & current", &Wire, 0x04, INA226Measurement::BUS_VOLTAGE),
+    SelectedINA226Sensor (4, "Accu voltage & current", &Wire, 0x04, INA226Measurement::BUS_VOLTAGE),
+    SelectedINA226Sensor (5, "Accu voltage & current", &Wire, 0x04, INA226Measurement::BUS_VOLTAGE),
+    SelectedINA226Sensor (6, "Accu voltage & current", &Wire, 0x04, INA226Measurement::BUS_VOLTAGE),
+    SelectedINA226Sensor (7, "Accu voltage & current", &Wire, 0x04, INA226Measurement::BUS_VOLTAGE),
+    SelectedINA226Sensor (8, "Accu voltage & current", &Wire, 0x04, INA226Measurement::BUS_VOLTAGE),
+    SelectedINA226Sensor (9, "Accu voltage & current", &Wire, 0x04, INA226Measurement::BUS_VOLTAGE),
 };
 
-static INA226Sensor ina_solar_list[9] = {
-    INA226Sensor (1, "Solar panel voltage & current", &Wire, 0x05),
-    INA226Sensor (2, "Solar panel voltage & current", &Wire, 0x05),
-    INA226Sensor (3, "Solar panel voltage & current", &Wire, 0x05),
-    INA226Sensor (4, "Solar panel voltage & current", &Wire, 0x05),
-    INA226Sensor (5, "Solar panel voltage & current", &Wire, 0x05),
-    INA226Sensor (6, "Solar panel voltage & current", &Wire, 0x05),
-    INA226Sensor (7, "Solar panel voltage & current", &Wire, 0x05),
-    INA226Sensor (8, "Solar panel voltage & current", &Wire, 0x05),
-    INA226Sensor (9, "Solar panel voltage & current", &Wire, 0x05),
+static SelectedINA226Sensor ina_solar_list[9] = {
+    SelectedINA226Sensor (1, "Solar panel voltage & current", &Wire, 0x05, INA226Measurement::BUS_VOLTAGE),
+    SelectedINA226Sensor (2, "Solar panel voltage & current", &Wire, 0x05, INA226Measurement::BUS_VOLTAGE),
+    SelectedINA226Sensor (3, "Solar panel voltage & current", &Wire, 0x05, INA226Measurement::BUS_VOLTAGE),
+    SelectedINA226Sensor (4, "Solar panel voltage & current", &Wire, 0x05, INA226Measurement::BUS_VOLTAGE),
+    SelectedINA226Sensor (5, "Solar panel voltage & current", &Wire, 0x05, INA226Measurement::BUS_VOLTAGE),
+    SelectedINA226Sensor (6, "Solar panel voltage & current", &Wire, 0x05, INA226Measurement::BUS_VOLTAGE),
+    SelectedINA226Sensor (7, "Solar panel voltage & current", &Wire, 0x05, INA226Measurement::BUS_VOLTAGE),
+    SelectedINA226Sensor (8, "Solar panel voltage & current", &Wire, 0x05, INA226Measurement::BUS_VOLTAGE),
+    SelectedINA226Sensor (9, "Solar panel voltage & current", &Wire, 0x05, INA226Measurement::BUS_VOLTAGE),
 };
 
 
