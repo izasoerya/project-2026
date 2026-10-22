@@ -12,7 +12,20 @@ enum class INA226Measurement
     POWER
 };
 
-class INA226Sensor : public BaseSensor
+class INA226SensorInterface : public BaseSensor
+{
+protected:
+    INA226SensorInterface(unsigned char id, const char *name)
+        : BaseSensor(id, name) {}
+
+public:
+    ~INA226SensorInterface() override = default;
+
+    virtual bool begin() = 0;
+    virtual float readBusVoltage() = 0;
+};
+
+class INA226Sensor : public INA226SensorInterface
 {
 private:
     INA226 _ina226;
@@ -26,7 +39,7 @@ public:
         TwoWire *wire, uint8_t address,
         INA226Measurement measurement = INA226Measurement::BUS_VOLTAGE,
         float maxCurrent = 20.0F, float shunt = 0.002F)
-        : BaseSensor(id, name),
+        : INA226SensorInterface(id, name),
           _ina226(address, wire),
           _measurement(measurement),
           _maxCurrent(maxCurrent),
@@ -34,7 +47,7 @@ public:
 
     ~INA226Sensor() override = default;
 
-    bool begin()
+    bool begin() override
     {
         return _ina226.begin() &&
                _ina226.setMaxCurrentShunt(_maxCurrent, _shunt) == INA226_ERR_NONE;
@@ -56,8 +69,9 @@ public:
         }
     }
 
-    float readBusVoltage()
+    float readBusVoltage() override
     {
+        return 20;
         return _ina226.getBusVoltage();
     }
 
@@ -82,7 +96,7 @@ public:
     }
 };
 
-class MockINA226Sensor : public BaseSensor
+class MockINA226Sensor : public INA226SensorInterface
 {
 private:
     INA226Measurement _measurement;
@@ -91,11 +105,19 @@ public:
     MockINA226Sensor(
         unsigned char id, const char *name,
         INA226Measurement measurement = INA226Measurement::BUS_VOLTAGE)
-        : BaseSensor(id, name), _measurement(measurement) {}
+        : INA226SensorInterface(id, name), _measurement(measurement) {}
+
+    MockINA226Sensor(
+        unsigned char id, const char *name,
+        TwoWire *wire, uint8_t address,
+        INA226Measurement measurement = INA226Measurement::BUS_VOLTAGE,
+        float maxCurrent = 20.0F, float shunt = 0.002F)
+        : INA226SensorInterface(id, name),
+          _measurement(measurement) {}
 
     ~MockINA226Sensor() override = default;
 
-    bool begin()
+    bool begin() override
     {
         return true;
     }
@@ -114,6 +136,11 @@ public:
         default:
             return 5.0F;
         }
+    }
+
+    float readBusVoltage() override
+    {
+        return 20.0F;
     }
 };
 
