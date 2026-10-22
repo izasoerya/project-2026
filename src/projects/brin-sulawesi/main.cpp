@@ -33,8 +33,8 @@ void setup()
 
     static Modbustatics *turbSensor = nullptr;
     static Modbustatics *awlrSensor = nullptr;
-    static INA226Sensor *inaAccuSensor = nullptr;
-    static INA226Sensor *inaSolarSensor = nullptr;
+    static INA226SensorInterface *inaAccuSensor = nullptr;
+    static INA226SensorInterface *inaSolarSensor = nullptr;
     for (size_t i = 0; i < sizeof(turb_list) / sizeof(turb_list[0]); i++)
     {
         if ((turb_list[i].getId() - 10) == firmwareId) // Turbidity id start from 11
@@ -55,7 +55,27 @@ void setup()
 
     FSMKernel kernel = FSMKernel(&sensorCtx, &networkCtx);
     while (1)
+    {
         kernel.loop();
+        while (Serial.available() > 0)
+        {
+            String command = Serial.readStringUntil('\n');
+            command.trim();
+
+            if (command == "SUSPEND")
+            {
+                Serial.println("Entering suspended state");
+                GlobalConfig::BATTERY_DANGER = 26.3;
+                GlobalConfig::BATTERY_WARNING = 26.5;
+            }
+            else if (command == "NORMAL")
+            {
+                Serial.println("Entering normal state");
+                GlobalConfig::BATTERY_DANGER = 11;
+                GlobalConfig::BATTERY_WARNING = 12;
+            }
+        }
+    }
 }
 
 void loop() {}
