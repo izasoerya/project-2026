@@ -27,23 +27,26 @@ public:
     void loop()
     {
         // === State Driver ===
-        if (_sensorCtx->accuINA.readBusVoltage() < GlobalConfig::BATTERY_DANGER)
+        const float batteryVoltage = _sensorCtx->accuINA.readBusVoltage();
+        if (batteryVoltage < GlobalConfig::BATTERY_DANGER)
         {
             _battState = BatteryState::DANGER_STATE;
             _appState = ApplicationState::SUSPEND_STATE;
         }
-        else if (_sensorCtx->accuINA.readBusVoltage() >= GlobalConfig::BATTERY_DANGER &&
-                 _sensorCtx->accuINA.readBusVoltage() < GlobalConfig::BATTERY_WARNING)
+        else if (batteryVoltage < GlobalConfig::BATTERY_WARNING)
         {
             _battState = BatteryState::WARNING_STATE;
             _appState = ApplicationState::SAMPLING_STATE;
         }
         else
+        {
             _battState = BatteryState::SAFE_STATE;
+            _appState = ApplicationState::SAMPLING_STATE;
+        }
 
         if (_sampleCount < _sampleTarget && _appState != ApplicationState::SUSPEND_STATE)
             _appState = ApplicationState::SAMPLING_STATE;
-        else
+        else if (_sampleCount >= _sampleTarget && _appState != ApplicationState::SUSPEND_STATE)
             _appState = ApplicationState::PUBLISH_STATE;
 
         // === State Task Declaration ===
