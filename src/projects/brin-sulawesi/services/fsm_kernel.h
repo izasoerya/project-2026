@@ -10,7 +10,8 @@ class FSMKernel
 private:
     const bool IS_MILLIS = true;
 
-    ApplicationState _state = ApplicationState::SAMPLING_STATE;
+    ApplicationState _appState = ApplicationState::SAMPLING_STATE;
+    BatteryState _battState = BatteryState::SAFE_STATE;
     SensorContext *_sensorCtx;
     NetworkingContext *_netCtx;
 
@@ -26,19 +27,33 @@ public:
     void loop()
     {
         // === State Driver ===
-        if (_sampleCount < _sampleTarget)
-            _state = ApplicationState::SAMPLING_STATE;
+        if (_sensorCtx->accuINA.readBusVoltage() < GlobalConfig::BATTERY_DANGER)
+        {
+            _battState = BatteryState::DANGER_STATE;
+            _appState = ApplicationState::SUSPEND_STATE;
+        }
+        else if (_sensorCtx->accuINA.readBusVoltage() >= GlobalConfig::BATTERY_DANGER &&
+                 _sensorCtx->accuINA.readBusVoltage() < GlobalConfig::BATTERY_WARNING)
+        {
+            _battState = BatteryState::WARNING_STATE;
+            _appState = ApplicationState::SAMPLING_STATE;
+        }
         else
-            _state = ApplicationState::PUBLISH_STATE;
+            _battState = BatteryState::SAFE_STATE;
+
+        if (_sampleCount < _sampleTarget && _appState != ApplicationState::SUSPEND_STATE)
+            _appState = ApplicationState::SAMPLING_STATE;
+        else
+            _appState = ApplicationState::PUBLISH_STATE;
 
         // === State Task Declaration ===
-        if (_state == ApplicationState::SAMPLING_STATE)
+        if (_appState == ApplicationState::SAMPLING_STATE)
         {
             _netCtx->wifi.disableWiFi();
 
             SensorObject sensorData = Application::samplingTask(_sensorCtx);
-            _sensorDataList[_sampleCount] = sensorData;
             Serial.printf("[INFO] Sampling: %s\n", sensorData.toString());
+            _sensorDataList[_sampleCount] = sensorData;
 
             if (!IS_MILLIS)
                 esp_light_sleep_start();
@@ -47,7 +62,7 @@ public:
 
             _sampleCount++;
         }
-        else if (_state == ApplicationState::PUBLISH_STATE)
+        else if (_appState == ApplicationState::PUBLISH_STATE)
         {
             SensorObject sensorAverage{};
             for (uint8_t i = 0; i < _sampleCount; i++)

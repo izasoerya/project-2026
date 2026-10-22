@@ -15,10 +15,18 @@ enum AppState
 
 enum ApplicationState
 {
-    UNKNOWN_STATE = 0,
+    UNKNOWN_APPLICATION_STATE = 0,
     SAMPLING_STATE,
-    CONNECT_STATE,
     PUBLISH_STATE,
+    SUSPEND_STATE,
+};
+
+enum BatteryState
+{
+    UNKNOWN_BATTERY_STATE = 0,
+    SAFE_STATE,
+    WARNING_STATE,
+    DANGER_STATE
 };
 
 enum FeaturesEnum
