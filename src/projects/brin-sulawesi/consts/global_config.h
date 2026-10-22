@@ -5,11 +5,12 @@
 
 namespace GlobalConfig
 {
+    float BATTERY_DANGER = 11.5;
+    float BATTERY_WARNING = 11.8;
+
     constexpr uint8_t deviceID = 1;
     constexpr uint32_t DELAY_SAMPLING = 10000;
     constexpr uint32_t DELAY_TX = 60000;
-    constexpr float BATTERY_DANGER = 11.5;
-    constexpr float BATTERY_WARNING = 11.8;
 
     constexpr const char *ssid = "Subhanallah";
     constexpr const char *password = "muhammadnabiyullah";
