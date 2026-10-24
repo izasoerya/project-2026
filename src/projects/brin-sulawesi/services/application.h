@@ -7,6 +7,7 @@
 #include "../models/task_context.h"
 #include "../models/datastore.h"
 #include "ota/http_ota.h"
+#include "mqtt_cmd_parser.h"
 
 struct MqttPayload
 {
@@ -35,18 +36,30 @@ public:
             }
             Serial.println("[INFO] Success publish /data");
 
-            bool successSubscribeOTA = mqtt.subscribe(
+            mqtt.subscribe(
                 GlobalConfig::OTA_TOPIC,
                 [&mqtt](const char *msg, const size_t len)
                 {
-                    bool successUpdateVersion = _mqttOtaCallback(msg, len);
-                    if (!successUpdateVersion)
-                        Serial.println("[ERROR] Failed update version over OTA");
-                    else
+                    bool success = MQTTCommandParser::otaCallback(msg, len);
+                    if (success)
                     {
                         mqtt.publish(GlobalConfig::OTA_RESPONSE_TOPIC, "SUCCESS");
                         esp_restart();
                     }
+                });
+            mqtt.subscribe(
+                GlobalConfig::PING_TOPIC,
+                [&mqtt](const char *msg, const size_t len)
+                {
+                    const char *res = MQTTCommandParser::pingCallback(msg, len);
+                    mqtt.publish(GlobalConfig::PING_RESPONSE_TOPIC, res);
+                });
+            mqtt.subscribe(
+                GlobalConfig::CMD_TOPIC,
+                [&mqtt](const char *msg, const size_t len)
+                {
+                    const char *res = MQTTCommandParser::cmdCallback(msg, len);
+                    mqtt.publish(GlobalConfig::CMD_RESPONSE_TOPIC, res);
                 });
 
             uint32_t attemptSubscribed = millis();
@@ -65,34 +78,9 @@ public:
                 mqtt.poll();
                 delay(1);
             }
-            Serial.println("No retain message about OTA");
             return true;
         }
         Serial.println("[INFO] MQTT Failed to Connect");
-        return false;
-    }
-
-    static bool _mqttOtaCallback(const char *msg, const size_t len)
-    {
-        JsonDocument doc;
-        deserializeJson(doc, msg, len);
-        const char *url = doc["url"];
-        const char *version = doc["version"];
-
-        Preferences prefs;
-        prefs.begin("app_config", true);
-        const String currentVersion = prefs.getString("version", "");
-        prefs.end();
-
-        if (currentVersion != version)
-        {
-            Serial.printf("[INFO] Update available, newest version: %s\n", version);
-            OTARequest ota(false, true);
-            bool successOTA = ota.beginInsecure(url, currentVersion.c_str(), version);
-            if (successOTA)
-                return true;
-        }
-        Serial.printf("[INFO] Already on newest version: %s\n", currentVersion);
         return false;
     }
 
