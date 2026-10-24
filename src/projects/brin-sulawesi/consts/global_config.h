@@ -23,7 +23,7 @@ namespace GlobalConfig
 
     constexpr const char *SENSOR_TOPIC = "devices/tester-water-sukawesi/data";
     constexpr const char *CMD_TOPIC = "devices/tester-water-sukawesi/cmd";
-    constexpr const char *CMD_RESPONSE_TOPIC = "devices/tester-water-sukawesi/ack";
+    constexpr const char *CMD_RESPONSE_TOPIC = "devices/tester-water-sukawesi/cmd/ack";
     constexpr const char *OTA_TOPIC = "devices/tester-water-sukawesi/ota";
     constexpr const char *OTA_RESPONSE_TOPIC = "devices/tester-water-sukawesi/ota/status";
     constexpr const char *PING_TOPIC = "devices/tester-water-sukawesi/ping";
