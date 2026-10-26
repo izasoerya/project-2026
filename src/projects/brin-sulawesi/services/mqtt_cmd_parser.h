@@ -59,7 +59,7 @@ public:
         if (parseError)
         {
             Serial.printf("[ERROR] Invalid command payload: %s\n", parseError.c_str());
-            return;
+            return "";
         }
 
         JsonDocument commandDoc;
@@ -73,7 +73,7 @@ public:
             {
                 Serial.printf("[ERROR] Invalid nested command payload: %s\n",
                               commandParseError.c_str());
-                return;
+                return "";
             }
             command = &commandDoc;
         }
@@ -82,7 +82,7 @@ public:
         if (type == nullptr)
         {
             Serial.println("[ERROR] Command payload requires a type");
-            return;
+            return "";
         }
 
         JsonDocument ackDoc;
@@ -113,6 +113,7 @@ public:
         {
             Serial.println("unkown command");
             Serial.printf("[ERROR] Unknown command type: %s\n", type);
+            return "";
         }
     }
 };
