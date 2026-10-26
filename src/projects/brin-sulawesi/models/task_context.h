@@ -35,8 +35,9 @@ struct NetworkingContext
     char hostname[32];
 
     WiFiModule &wifi;
+    BaseMQTT &mqtt;
 
-    NetworkingContext(WiFiModule &w) : wifi(w)
+    NetworkingContext(WiFiModule &w, BaseMQTT &m) : wifi(w), mqtt(m)
     {
         snprintf(hostname, sizeof(hostname), "%s-%d", GlobalConfig::hostname, GlobalConfig::deviceID);
     }

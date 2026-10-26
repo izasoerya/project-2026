@@ -51,7 +51,8 @@ void setup()
     static WiFiModule inet(
         GlobalConfig::ssid, GlobalConfig::password, GlobalConfig::hostname,
         wifi_power_t::WIFI_POWER_8_5dBm);
-    static NetworkingContext networkCtx(inet);
+    static MQTTWebsocketSecure mqtt(GlobalConfig::BROKER_MQTT, GlobalConfig::PORT_MQTT);
+    static NetworkingContext networkCtx(inet, mqtt);
 
     FSMKernel kernel = FSMKernel(&sensorCtx, &networkCtx);
     while (1)

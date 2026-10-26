@@ -24,11 +24,10 @@ public:
         while (WiFi.status() != WL_CONNECTED)
             ctx->wifi.begin(false); // BLOCKING TIMEOUT 20S
 
-        MQTTWebsocketSecure mqtt(GlobalConfig::BROKER_MQTT, GlobalConfig::PORT_MQTT);
-        bool isMQTTConnected = mqtt.connect(GlobalConfig::USERNAME_MQTT, GlobalConfig::PASSWORD_MQTT); // BLOCKING TIMEOUT 20S
+        bool isMQTTConnected = ctx->mqtt.connect(GlobalConfig::USERNAME_MQTT, GlobalConfig::PASSWORD_MQTT); // BLOCKING TIMEOUT 20S
         if (isMQTTConnected)
         {
-            bool successPublishData = mqtt.publish(payload.topic, payload.message);
+            bool successPublishData = ctx->mqtt.publish(payload.topic, payload.message);
             if (!successPublishData)
             {
                 Serial.println("[ERROR] Failed to publish /data");
@@ -36,46 +35,46 @@ public:
             }
             Serial.println("[INFO] Success publish /data");
 
-            mqtt.subscribe(
+            ctx->mqtt.subscribe(
                 GlobalConfig::OTA_TOPIC,
-                [&mqtt](const char *msg, const size_t len)
+                [&ctx](const char *msg, const size_t len)
                 {
                     bool success = MQTTCommandParser::otaCallback(msg, len);
                     if (success)
                     {
-                        mqtt.publish(GlobalConfig::OTA_RESPONSE_TOPIC, "SUCCESS");
+                        ctx->mqtt.publish(GlobalConfig::OTA_RESPONSE_TOPIC, "SUCCESS");
                         esp_restart();
                     }
                 });
-            mqtt.subscribe(
+            ctx->mqtt.subscribe(
                 GlobalConfig::PING_TOPIC,
-                [&mqtt](const char *msg, const size_t len)
+                [&ctx](const char *msg, const size_t len)
                 {
                     const char *res = MQTTCommandParser::pingCallback(msg, len);
-                    mqtt.publish(GlobalConfig::PING_RESPONSE_TOPIC, res);
+                    ctx->mqtt.publish(GlobalConfig::PING_RESPONSE_TOPIC, res);
                 });
-            mqtt.subscribe(
+            ctx->mqtt.subscribe(
                 GlobalConfig::CMD_TOPIC,
-                [&mqtt](const char *msg, const size_t len)
+                [&ctx](const char *msg, const size_t len)
                 {
                     const char *res = MQTTCommandParser::cmdCallback(msg, len);
-                    mqtt.publish(GlobalConfig::CMD_RESPONSE_TOPIC, res);
+                    ctx->mqtt.publish(GlobalConfig::CMD_RESPONSE_TOPIC, res);
                 });
 
             uint32_t attemptSubscribed = millis();
             while (millis() - attemptSubscribed <= 5000)
             {
-                if (!mqtt.isConnected())
+                if (!ctx->mqtt.isConnected())
                 {
                     static unsigned long lastReconnect = 0;
                     if (millis() - lastReconnect > 5000)
                     {
                         Serial.println("[INFO] Reconnecting MQTT...");
                         lastReconnect = millis();
-                        mqtt.connect(GlobalConfig::USERNAME_MQTT, GlobalConfig::PASSWORD_MQTT);
+                        ctx->mqtt.connect(GlobalConfig::USERNAME_MQTT, GlobalConfig::PASSWORD_MQTT);
                     }
                 }
-                mqtt.poll();
+                ctx->mqtt.poll();
                 delay(1);
             }
             return true;
