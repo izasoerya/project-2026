@@ -69,7 +69,10 @@ public:
             if (millis() - attemptTimestamp > 20000)
                 return false;
         }
-        Serial.printf("Connected with IP: %s\n", WiFi.localIP().toString());
+        IPAddress ip = WiFi.localIP();
+        char buffer[16];
+        snprintf(buffer, sizeof(buffer), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+        Serial.printf("Connected with IP: %s\n", buffer);
 
         if (!mdns)
             return true;
@@ -113,7 +116,10 @@ public:
                     bool success = WiFi.status() == WL_CONNECTED;
                     if (p->callback)    
                         p->callback(success);
-                    Serial.printf("Connected with IP: %s\n", WiFi.localIP().toString());
+                    IPAddress ip = WiFi.localIP();
+                    char buffer[32];
+                    snprintf(buffer, sizeof(buffer), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+                    Serial.printf("Connected with IP: %s\n", buffer);
 
                     
                     if (success) {
