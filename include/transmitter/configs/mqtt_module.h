@@ -68,6 +68,11 @@ public:
         return _mqttClient.subscribe(topic, cb);
     }
 
+    bool unsubscribe(const char *topic)
+    {
+        return _mqttClient.unsubscribe(topic);
+    }
+
     bool publish(const char *topic, const char *msg, bool retain = false, uint8_t qos = 0)
     {
         return _mqttClient.publish(topic, msg, retain, qos);
@@ -103,7 +108,7 @@ public:
             if (millis() - startAttempt > 5000) // 5 second before timeout
                 return false;
         }
-        _connectToMQTT(id, username, password);
+        return _connectToMQTT(id, username, password);
     }
 
     bool connect(const char *id = "default-client")
@@ -118,7 +123,7 @@ public:
             if (millis() - startAttempt > 5000) // 5 second before timeout
                 return false;
         }
-        _connectToMQTT(id, getUsername(), getPassword());
+        return _connectToMQTT(id, getUsername(), getPassword());
     }
 };
 
