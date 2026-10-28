@@ -54,6 +54,12 @@ public:
 
     static const char *cmdCallback(const char *msg, const size_t len)
     {
+        if (msg == nullptr || len == 0)
+        {
+            Serial.println("[ERROR] Empty command payload");
+            return "";
+        }
+
         JsonDocument doc;
         const DeserializationError parseError = deserializeJson(doc, msg, len);
         if (parseError)
@@ -109,9 +115,46 @@ public:
 
             return response;
         }
+        else if (strcmp(type, "calibrate") == 0)
+        {
+            Serial.println("[INFO] MQTT CMD CALIBRATE");
+            const char *sensorId = doc["sensorId"];
+            if (sensorId == nullptr)
+            {
+                Serial.println("[ERROR] Calibrate command requires a sensor ID");
+                return "";
+            }
+
+            if (strcmp(sensorId, "9e7ad877-9412-4b47-addb-f16d507ba262") == 0)
+            {
+                Serial.print("[INFO] MQTT CMD CALIBRATE TURBIDITY");
+
+                ackDoc["commandId"] = uuid;
+                ackDoc["success"] = true;
+                ackDoc["message"] = "START CALIBRATE TURBIDITY";
+                serializeJson(ackDoc, response);
+
+                return response;
+            }
+            else if (strcmp(sensorId, "tinggi_muka_air") == 0)
+            {
+                Serial.print("[INFO] MQTT CMD CALIBRATE TINGGI MUKA AIR");
+
+                ackDoc["commandId"] = uuid;
+                ackDoc["success"] = true;
+                ackDoc["message"] = "START CALIBRATE TINGGI MUKA AIR";
+                serializeJson(ackDoc, response);
+
+                return response;
+            }
+            else
+            {
+                Serial.printf("[ERROR] Unknown sensor ID: %s\n", sensorId);
+                return "";
+            }
+        }
         else
         {
-            Serial.println("unkown command");
             Serial.printf("[ERROR] Unknown command type: %s\n", type);
             return "";
         }

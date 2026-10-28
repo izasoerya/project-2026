@@ -38,4 +38,12 @@ enum FeaturesEnum
     FEATURES_UNKNOWN
 };
 
+enum CalibrationMode
+{
+    CAL_UNKNOWN = 0,
+    CAL_TURBIDITY,
+    CAL_WATER_LEVEL,
+    CAL_TEMPERATURE
+};
+
 #endif // APP_STATE_PARSER

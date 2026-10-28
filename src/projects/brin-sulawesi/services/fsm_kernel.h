@@ -4,6 +4,13 @@
 #include "application.h"
 #include "projects/brin-sulawesi/models/task_context.h"
 #include "projects/brin-sulawesi/utils/enum.h"
+#include "projects/brin-sulawesi/services/calibration_kernel.h"
+
+CalibrationMode modeCalibration = CalibrationMode::CAL_UNKNOWN;
+void calibrationModeCb(CalibrationMode mode)
+{
+    modeCalibration = mode;
+}
 
 class FSMKernel
 {
@@ -14,6 +21,7 @@ private:
     BatteryState _battState = BatteryState::SAFE_STATE;
     SensorContext *_sensorCtx;
     NetworkingContext *_netCtx;
+    CalibrationKernel _cKernel;
 
     uint8_t _sampleCount = 0;
     const uint8_t _sampleTarget = 3;
@@ -21,7 +29,8 @@ private:
 
 public:
     FSMKernel(SensorContext *sensorCtx, NetworkingContext *netCtx)
-        : _sensorCtx(sensorCtx), _netCtx(netCtx) {}
+        : _sensorCtx(sensorCtx), _netCtx(netCtx),
+          _cKernel(_sensorCtx, _netCtx) {}
     ~FSMKernel() {}
 
     void loop()
@@ -42,6 +51,13 @@ public:
         {
             _battState = BatteryState::SAFE_STATE;
             _appState = ApplicationState::SAMPLING_STATE;
+        }
+
+        if (modeCalibration == CAL_TURBIDITY)
+        {
+            _cKernel.setupEnvironment();
+            _cKernel.calibrateTurbidity();
+            modeCalibration = CalibrationMode::CAL_UNKNOWN;
         }
 
         if (_sampleCount < _sampleTarget && _appState != ApplicationState::SUSPEND_STATE)
@@ -82,7 +98,7 @@ public:
             bool isPublishSuccess = false;
             while (!isPublishSuccess && millis() - attemptedTimestamp < 15000)
             {
-                isPublishSuccess = Application::networkingTask(_netCtx, payload);
+                isPublishSuccess = Application::networkingTask(_netCtx, payload, calibrationModeCb);
                 if (isPublishSuccess)
                     _sampleCount = 0;
 

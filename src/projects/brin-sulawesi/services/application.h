@@ -18,7 +18,10 @@ struct MqttPayload
 class Application
 {
 public:
-    static bool networkingTask(void *pvParam, MqttPayload payload)
+    static char pendingCommandResponse[128];
+    static volatile bool hasPendingCommandResponse;
+
+    static bool networkingTask(void *pvParam, MqttPayload payload, std::function<void(CalibrationMode)> calMode)
     {
         NetworkingContext *ctx = static_cast<NetworkingContext *>(pvParam);
         while (WiFi.status() != WL_CONNECTED)
@@ -37,7 +40,7 @@ public:
 
             ctx->mqtt.subscribe(
                 GlobalConfig::OTA_TOPIC,
-                [&ctx](const char *msg, const size_t len)
+                [ctx](const char *msg, const size_t len)
                 {
                     bool success = MQTTCommandParser::otaCallback(msg, len);
                     if (success)
@@ -48,17 +51,30 @@ public:
                 });
             ctx->mqtt.subscribe(
                 GlobalConfig::PING_TOPIC,
-                [&ctx](const char *msg, const size_t len)
+                [ctx](const char *msg, const size_t len)
                 {
                     const char *res = MQTTCommandParser::pingCallback(msg, len);
                     ctx->mqtt.publish(GlobalConfig::PING_RESPONSE_TOPIC, res);
                 });
+
             ctx->mqtt.subscribe(
                 GlobalConfig::CMD_TOPIC,
-                [&ctx](const char *msg, const size_t len)
+                [ctx, calMode](const char *msg, const size_t len)
                 {
                     const char *res = MQTTCommandParser::cmdCallback(msg, len);
-                    ctx->mqtt.publish(GlobalConfig::CMD_RESPONSE_TOPIC, res);
+                    snprintf(pendingCommandResponse, sizeof(pendingCommandResponse), "%s", res);
+                    hasPendingCommandResponse = true;
+
+                    JsonDocument responseDoc;
+                    const DeserializationError error = deserializeJson(responseDoc, res);
+
+                    if (!error)
+                    {
+                        const char *message = responseDoc["message"];
+                        if (message != nullptr &&
+                            strcmp(message, "START CALIBRATE TURBIDITY") == 0)
+                            calMode(CalibrationMode::CAL_TURBIDITY);
+                    }
                 });
 
             uint32_t attemptSubscribed = millis();
@@ -75,8 +91,18 @@ public:
                     }
                 }
                 ctx->mqtt.poll();
+                if (hasPendingCommandResponse)
+                {
+                    ctx->mqtt.publish(
+                        GlobalConfig::CMD_RESPONSE_TOPIC,
+                        pendingCommandResponse);
+                    hasPendingCommandResponse = false;
+                }
                 delay(1);
             }
+
+            ctx->mqtt.unsubscribe(GlobalConfig::CMD_TOPIC);
+            ctx->mqtt.disconnect();
             return true;
         }
         Serial.println("[INFO] MQTT Failed to Connect");
@@ -101,12 +127,15 @@ public:
         // accuINA.begin();
         // solarINA.begin();
 
-        static SensorObject sensor = SensorObject{
-            .turbidity = 10,
+        SensorObject sensor = SensorObject{
+            .turbidity = random(10000) / 10.0F,
             .awlr = 22,
             .battery = 2.3};
         return sensor;
     }
 };
+
+char Application::pendingCommandResponse[128] = {};
+volatile bool Application::hasPendingCommandResponse = false;
 
 #endif // APPLICATION_H
