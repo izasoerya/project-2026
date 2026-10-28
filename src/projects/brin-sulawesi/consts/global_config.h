@@ -22,6 +22,7 @@ namespace GlobalConfig
     constexpr const uint16_t PORT_MQTT = 443;
 
     constexpr const char *SENSOR_TOPIC = "devices/tester-water-sukawesi/data";
+    constexpr const char *SENSOR_STREAM_TOPIC = "devices/tester-water-sukawesi/stream";
     constexpr const char *CMD_TOPIC = "devices/tester-water-sukawesi/cmd";
     constexpr const char *CMD_RESPONSE_TOPIC = "devices/tester-water-sukawesi/cmd/ack";
     constexpr const char *OTA_TOPIC = "devices/tester-water-sukawesi/ota";
