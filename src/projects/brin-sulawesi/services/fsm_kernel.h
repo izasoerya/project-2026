@@ -6,23 +6,24 @@
 #include "projects/brin-sulawesi/utils/enum.h"
 #include "projects/brin-sulawesi/services/calibration_kernel.h"
 
-CalibrationMode modeCalibration = CalibrationMode::CAL_UNKNOWN;
-void calibrationModeCb(CalibrationMode mode)
-{
-    modeCalibration = mode;
-}
-
 class FSMKernel
 {
 private:
     const bool IS_MILLIS = true;
 
+    // State holder variable
     ApplicationState _appState = ApplicationState::SAMPLING_STATE;
     BatteryState _battState = BatteryState::SAFE_STATE;
+    CalibrationMode _calState = CalibrationMode::CAL_UNKNOWN;
+
+    // Task context
     SensorContext *_sensorCtx;
     NetworkingContext *_netCtx;
-    CalibrationKernel _cKernel;
 
+    // Sub-kernel for calibration
+    CalibrationKernel _calKernel;
+
+    // Peripheral for small task
     uint8_t _sampleCount = 0;
     const uint8_t _sampleTarget = 3;
     SensorObject _sensorDataList[8];
@@ -30,12 +31,12 @@ private:
 public:
     FSMKernel(SensorContext *sensorCtx, NetworkingContext *netCtx)
         : _sensorCtx(sensorCtx), _netCtx(netCtx),
-          _cKernel(_sensorCtx, _netCtx) {}
+          _calKernel(_sensorCtx, _netCtx) {}
     ~FSMKernel() {}
 
     void loop()
     {
-        // === State Driver ===
+        // Battery State Driver
         const float batteryVoltage = _sensorCtx->accuINA.readBusVoltage();
         if (batteryVoltage < GlobalConfig::BATTERY_DANGER)
         {
@@ -53,17 +54,19 @@ public:
             _appState = ApplicationState::SAMPLING_STATE;
         }
 
-        if (modeCalibration == CAL_TURBIDITY)
-        {
-            _cKernel.setupEnvironment();
-            _cKernel.calibrateTurbidity();
-            modeCalibration = CalibrationMode::CAL_UNKNOWN;
-        }
-
+        // Main Application State Driver
         if (_sampleCount < _sampleTarget && _appState != ApplicationState::SUSPEND_STATE)
             _appState = ApplicationState::SAMPLING_STATE;
         else if (_sampleCount >= _sampleTarget && _appState != ApplicationState::SUSPEND_STATE)
             _appState = ApplicationState::PUBLISH_STATE;
+
+        // Sub-kernel driver (Blocking)
+        if (_calState == CAL_TURBIDITY)
+        {
+            _calKernel.setupEnvironment();
+            _calKernel.calibrateTurbidity();
+            _calState = CalibrationMode::CAL_UNKNOWN;
+        }
 
         // === State Task Declaration ===
         if (_appState == ApplicationState::SAMPLING_STATE)
@@ -98,7 +101,12 @@ public:
             bool isPublishSuccess = false;
             while (!isPublishSuccess && millis() - attemptedTimestamp < 15000)
             {
-                isPublishSuccess = Application::networkingTask(_netCtx, payload, calibrationModeCb);
+                isPublishSuccess = Application::networkingTask(
+                    _netCtx, payload,
+                    [this](CalibrationMode cMode)
+                    {
+                        _calState = cMode;
+                    });
                 if (isPublishSuccess)
                     _sampleCount = 0;
 
