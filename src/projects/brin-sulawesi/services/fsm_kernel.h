@@ -4,7 +4,6 @@
 #include "application.h"
 #include "projects/brin-sulawesi/models/task_context.h"
 #include "projects/brin-sulawesi/utils/enum.h"
-#include "projects/brin-sulawesi/services/calibration_kernel.h"
 
 class FSMKernel
 {
@@ -20,9 +19,6 @@ private:
     SensorContext *_sensorCtx;
     NetworkingContext *_netCtx;
 
-    // Sub-kernel for calibration
-    CalibrationKernel _calKernel;
-
     // Peripheral for small task
     uint8_t _sampleCount = 0;
     const uint8_t _sampleTarget = 3;
@@ -30,8 +26,7 @@ private:
 
 public:
     FSMKernel(SensorContext *sensorCtx, NetworkingContext *netCtx)
-        : _sensorCtx(sensorCtx), _netCtx(netCtx),
-          _calKernel(_sensorCtx, _netCtx) {}
+        : _sensorCtx(sensorCtx), _netCtx(netCtx) {}
     ~FSMKernel() {}
 
     void loop()
@@ -61,11 +56,25 @@ public:
             _appState = ApplicationState::PUBLISH_STATE;
 
         // Sub-kernel driver (Blocking)
-        if (_calState == CAL_TURBIDITY)
+        while (_calState != CAL_UNKNOWN)
         {
-            _calKernel.setupEnvironment();
-            _calKernel.calibrateTurbidity();
-            _calState = CalibrationMode::CAL_UNKNOWN;
+            _netCtx->mqtt.poll();
+
+            static uint32_t prevPublish = millis();
+            if (millis() - prevPublish > 3000)
+            {
+                prevPublish = millis();
+                if (_calState == CAL_ALL)
+                {
+                    SensorObject sensor = Application::samplingTask(_sensorCtx);
+                    _netCtx->mqtt.publish(GlobalConfig::SENSOR_STREAM_TOPIC, sensor.toCSV());
+                }
+                else if (_calState == CAL_TURBIDITY)
+                {
+                    SensorObject sensor = Application::samplingTask(_sensorCtx);
+                    _netCtx->mqtt.publish(GlobalConfig::SENSOR_STREAM_TOPIC, sensor.toCSV());
+                }
+            }
         }
 
         // === State Task Declaration ===

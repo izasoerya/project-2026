@@ -28,8 +28,19 @@ public:
 
     static bool otaCallback(const char *msg, const size_t len)
     {
+        if (msg == nullptr || len == 0)
+        {
+            Serial.println("[ERROR] Empty command payload");
+            return "";
+        }
+
         JsonDocument doc;
-        deserializeJson(doc, msg, len);
+        const DeserializationError parseError = deserializeJson(doc, msg, len);
+        if (parseError)
+        {
+            Serial.printf("[ERROR] Invalid command payload: %s\n", parseError.c_str());
+            return "";
+        }
         const char *url = doc["url"];
         const char *version = doc["version"];
 
@@ -37,22 +48,22 @@ public:
         prefs.begin("app_config", true);
         const String currentVersion = prefs.getString("version", "");
         prefs.end();
-
-        if (currentVersion != version)
+        if (currentVersion == version)
         {
-            Serial.printf("[INFO] Update available, newest version: %s\n", version);
-            OTARequest ota(false, true);
-            bool successOTA = ota.beginInsecure(url, currentVersion.c_str(), version);
-            if (successOTA)
-                return true;
-            Serial.println("[INFO] Failed to update");
+            Serial.printf("[INFO] Already on newest version: %s\n", currentVersion);
             return false;
         }
-        Serial.printf("[INFO] Already on newest version: %s\n", currentVersion);
+
+        Serial.printf("[INFO] Update available, newest version: %s\n", version);
+        OTARequest ota(false, true);
+        bool successOTA = ota.beginInsecure(url, currentVersion.c_str(), version);
+        if (successOTA)
+            return true;
+        Serial.println("[INFO] Failed to update");
         return false;
     }
 
-    static const char *cmdCallback(const char *msg, const size_t len)
+    static const char *cmdCallback(const char *msg, const size_t len, std::function<void(CalibrationMode)> cb)
     {
         if (msg == nullptr || len == 0)
         {
@@ -133,6 +144,7 @@ public:
                 ackDoc["success"] = true;
                 ackDoc["message"] = "START CALIBRATE TURBIDITY";
                 serializeJson(ackDoc, response);
+                cb(CAL_TURBIDITY);
 
                 return response;
             }
@@ -144,6 +156,7 @@ public:
                 ackDoc["success"] = true;
                 ackDoc["message"] = "START CALIBRATE TINGGI MUKA AIR";
                 serializeJson(ackDoc, response);
+                cb(CAL_WATER_LEVEL);
 
                 return response;
             }
@@ -152,6 +165,18 @@ public:
                 Serial.printf("[ERROR] Unknown sensor ID: %s\n", sensorId);
                 return "";
             }
+        }
+        else if (strcmp(type, "done-calibrate") == 0)
+        {
+            Serial.println("[INFO] MQTT CMD DONE CALIBRATE");
+
+            ackDoc["commandId"] = uuid;
+            ackDoc["success"] = true;
+            ackDoc["message"] = "Done Calibrating";
+            serializeJson(ackDoc, response);
+            cb(CAL_UNKNOWN);
+
+            return response;
         }
         else
         {

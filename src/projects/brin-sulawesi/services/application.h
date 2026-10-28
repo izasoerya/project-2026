@@ -18,9 +18,6 @@ struct MqttPayload
 class Application
 {
 public:
-    static char pendingCommandResponse[128];
-    static volatile bool hasPendingCommandResponse;
-
     static bool networkingTask(void *pvParam, MqttPayload payload, std::function<void(CalibrationMode)> calMode)
     {
         NetworkingContext *ctx = static_cast<NetworkingContext *>(pvParam);
@@ -28,85 +25,62 @@ public:
             ctx->wifi.begin(false); // BLOCKING TIMEOUT 20S
 
         bool isMQTTConnected = ctx->mqtt.connect(GlobalConfig::USERNAME_MQTT, GlobalConfig::PASSWORD_MQTT); // BLOCKING TIMEOUT 20S
-        if (isMQTTConnected)
+        if (!isMQTTConnected)
         {
-            bool successPublishData = ctx->mqtt.publish(payload.topic, payload.message);
-            if (!successPublishData)
-            {
-                Serial.println("[ERROR] Failed to publish /data");
-                return false;
-            }
-            Serial.println("[INFO] Success publish /data");
-
-            ctx->mqtt.subscribe(
-                GlobalConfig::OTA_TOPIC,
-                [ctx](const char *msg, const size_t len)
-                {
-                    bool success = MQTTCommandParser::otaCallback(msg, len);
-                    if (success)
-                    {
-                        ctx->mqtt.publish(GlobalConfig::OTA_RESPONSE_TOPIC, "SUCCESS");
-                        esp_restart();
-                    }
-                });
-            ctx->mqtt.subscribe(
-                GlobalConfig::PING_TOPIC,
-                [ctx](const char *msg, const size_t len)
-                {
-                    const char *res = MQTTCommandParser::pingCallback(msg, len);
-                    ctx->mqtt.publish(GlobalConfig::PING_RESPONSE_TOPIC, res);
-                });
-
-            ctx->mqtt.subscribe(
-                GlobalConfig::CMD_TOPIC,
-                [ctx, calMode](const char *msg, const size_t len)
-                {
-                    const char *res = MQTTCommandParser::cmdCallback(msg, len);
-                    snprintf(pendingCommandResponse, sizeof(pendingCommandResponse), "%s", res);
-                    hasPendingCommandResponse = true;
-
-                    JsonDocument responseDoc;
-                    const DeserializationError error = deserializeJson(responseDoc, res);
-
-                    if (!error)
-                    {
-                        const char *message = responseDoc["message"];
-                        if (message != nullptr &&
-                            strcmp(message, "START CALIBRATE TURBIDITY") == 0)
-                            calMode(CalibrationMode::CAL_TURBIDITY);
-                    }
-                });
-
-            uint32_t attemptSubscribed = millis();
-            while (millis() - attemptSubscribed <= 5000)
-            {
-                if (!ctx->mqtt.isConnected())
-                {
-                    static unsigned long lastReconnect = 0;
-                    if (millis() - lastReconnect > 5000)
-                    {
-                        Serial.println("[INFO] Reconnecting MQTT...");
-                        lastReconnect = millis();
-                        ctx->mqtt.connect(GlobalConfig::USERNAME_MQTT, GlobalConfig::PASSWORD_MQTT);
-                    }
-                }
-                ctx->mqtt.poll();
-                if (hasPendingCommandResponse)
-                {
-                    ctx->mqtt.publish(
-                        GlobalConfig::CMD_RESPONSE_TOPIC,
-                        pendingCommandResponse);
-                    hasPendingCommandResponse = false;
-                }
-                delay(1);
-            }
-
-            ctx->mqtt.unsubscribe(GlobalConfig::CMD_TOPIC);
-            ctx->mqtt.disconnect();
-            return true;
+            Serial.println("[INFO] MQTT Failed to Connect");
+            return false;
         }
-        Serial.println("[INFO] MQTT Failed to Connect");
-        return false;
+
+        bool successPublishData = ctx->mqtt.publish(payload.topic, payload.message);
+        if (!successPublishData)
+        {
+            Serial.println("[ERROR] Failed to publish /data");
+            return false;
+        }
+        Serial.println("[INFO] Success publish /data");
+
+        ctx->mqtt.subscribe(
+            GlobalConfig::OTA_TOPIC,
+            [ctx](const char *msg, const size_t len)
+            {
+                bool success = MQTTCommandParser::otaCallback(msg, len);
+                if (success)
+                {
+                    ctx->mqtt.publish(GlobalConfig::OTA_RESPONSE_TOPIC, "SUCCESS");
+                    esp_restart();
+                }
+            });
+        ctx->mqtt.subscribe(
+            GlobalConfig::PING_TOPIC,
+            [ctx](const char *msg, const size_t len)
+            {
+                const char *res = MQTTCommandParser::pingCallback(msg, len);
+                ctx->mqtt.publish(GlobalConfig::PING_RESPONSE_TOPIC, res);
+            });
+        ctx->mqtt.subscribe(
+            GlobalConfig::CMD_TOPIC,
+            [ctx, calMode](const char *msg, const size_t len)
+            {
+                const char *res = MQTTCommandParser::cmdCallback(msg, len, calMode);
+                ctx->mqtt.publish(GlobalConfig::CMD_RESPONSE_TOPIC, res);
+            });
+
+        uint32_t attemptSubscribed = millis();
+        while (millis() - attemptSubscribed <= 5000)
+        {
+            if (!ctx->mqtt.isConnected())
+            {
+                static unsigned long lastReconnect = 0;
+                if (millis() - lastReconnect > 5000)
+                {
+                    Serial.println("[INFO] Reconnecting MQTT...");
+                    lastReconnect = millis();
+                    ctx->mqtt.connect(GlobalConfig::USERNAME_MQTT, GlobalConfig::PASSWORD_MQTT);
+                }
+            }
+            ctx->mqtt.poll();
+        }
+        return true;
     }
 
     static SensorObject samplingTask(void *pvParam)
@@ -134,8 +108,5 @@ public:
         return sensor;
     }
 };
-
-char Application::pendingCommandResponse[128] = {};
-volatile bool Application::hasPendingCommandResponse = false;
 
 #endif // APPLICATION_H
