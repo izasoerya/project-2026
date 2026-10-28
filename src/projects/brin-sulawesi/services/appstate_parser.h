@@ -43,7 +43,8 @@ enum CalibrationMode
     CAL_UNKNOWN = 0,
     CAL_TURBIDITY,
     CAL_WATER_LEVEL,
-    CAL_TEMPERATURE
+    CAL_TEMPERATURE,
+    CAL_ALL
 };
 
 #endif // APP_STATE_PARSER
