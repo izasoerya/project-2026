@@ -102,16 +102,13 @@ public:
                 (sensorAverage.awlr += _sensorDataList[i].awlr) /= 2;
                 (sensorAverage.battery += _sensorDataList[i].battery) /= 2;
             }
-            MqttPayload payload = MqttPayload{
-                .topic = GlobalConfig::SENSOR_TOPIC,
-                .message = sensorAverage.toCSV()};
 
             const uint32_t attemptedTimestamp = millis();
             bool isPublishSuccess = false;
             while (!isPublishSuccess && millis() - attemptedTimestamp < 15000)
             {
                 isPublishSuccess = Application::networkingTask(
-                    _netCtx, payload,
+                    _netCtx, sensorAverage.toCSV(),
                     [this](CalibrationMode cMode)
                     {
                         _calState = cMode;

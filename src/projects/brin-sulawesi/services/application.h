@@ -9,16 +9,11 @@
 #include "ota/http_ota.h"
 #include "mqtt_cmd_parser.h"
 
-struct MqttPayload
-{
-    const char *topic;
-    const char *message;
-};
-
 class Application
 {
 public:
-    static bool networkingTask(void *pvParam, MqttPayload payload, std::function<void(CalibrationMode)> calMode)
+    static bool networkingTask(void *pvParam,
+                               const char *msg, std::function<void(CalibrationMode)> calMode)
     {
         NetworkingContext *ctx = static_cast<NetworkingContext *>(pvParam);
         while (WiFi.status() != WL_CONNECTED)
@@ -31,7 +26,7 @@ public:
             return false;
         }
 
-        bool successPublishData = ctx->mqtt.publish(payload.topic, payload.message);
+        bool successPublishData = ctx->mqtt.publish(GlobalConfig::SENSOR_TOPIC, msg);
         if (!successPublishData)
         {
             Serial.println("[ERROR] Failed to publish /data");
@@ -47,6 +42,7 @@ public:
                 if (success)
                 {
                     ctx->mqtt.publish(GlobalConfig::OTA_RESPONSE_TOPIC, "SUCCESS");
+                    delay(1000); // Without this publish won't get sent
                     esp_restart();
                 }
             });
