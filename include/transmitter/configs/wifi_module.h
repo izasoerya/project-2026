@@ -62,6 +62,7 @@ public:
         WiFi.mode(wifi_mode_t::WIFI_MODE_STA);
         WiFi.begin(_ssid, _password);
         uint32_t attemptTimestamp = millis();
+        WiFi.setTxPower(_txCConfig);
         while (WiFi.status() != WL_CONNECTED)
         {
             Serial.print(".");
