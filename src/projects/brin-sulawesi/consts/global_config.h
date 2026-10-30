@@ -12,8 +12,8 @@ namespace GlobalConfig
     constexpr uint32_t DELAY_SAMPLING = 10000;
     constexpr uint32_t DELAY_TX = 60000;
 
-    constexpr const char *ssid = "Subhanallah";
-    constexpr const char *password = "muhammadnabiyullah";
+    constexpr const char *ssid = "4G-UFI-CCD";
+    constexpr const char *password = "1234567890";
     constexpr const char *hostname = "BRIN-WTQ-DL";
 
     constexpr const char *USERNAME_MQTT = "device_tester_water_sukawesi";
