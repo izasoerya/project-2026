@@ -3,9 +3,6 @@
 
 #pragma once
 
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <stdint.h>
 #include <ArduinoJson.h>
 
 struct SensorObject
@@ -40,6 +37,42 @@ struct SensorObject
         snprintf(buffer, sizeof(buffer),
                  "%.6f,%.6f,%.1f,%.1f,%.1f,%d",
                  -7.8367746, 110.3421102, turbidity, awlr, battery, 1);
+        return buffer;
+    }
+};
+
+struct SensorLogAggregate
+{
+    SensorObject sensor;
+
+    SensorLogAggregate(SensorObject s) : sensor(s) {}
+
+    const char *toString()
+    {
+        static char buffer[64];
+        snprintf(buffer, sizeof(buffer),
+                 "TURB: %.1f | LVL: %.1f | BATT: %.1f | F_HEAP: %u, | MIN_F_HEAP: %u | LARGEST_BLOCK: %u\n",
+                 sensor.turbidity, sensor.awlr, sensor.battery,
+                 ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+        return buffer;
+    }
+
+    const char *toString(int8_t rssi)
+    {
+        static char buffer[128];
+        snprintf(buffer, sizeof(buffer),
+                 "TURB: %.1f | LVL: %.1f | BATT: %.1f | RSSI: %d | F_HEAP: %lu, | MIN_F_HEAP: %lu | LARGEST_BLOCK: %lu\n",
+                 sensor.turbidity, sensor.awlr, sensor.battery,
+                 rssi, ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+        return buffer;
+    }
+
+    const char *toCSV(int8_t rssi)
+    {
+        static char buffer[128];
+        snprintf(buffer, sizeof(buffer),
+                 "%.6f,%.6f,%.1f,%.1f,%.1f,%d,%d,%lu,%lu,%lu",
+                 -7.8367746, 110.3421102, sensor.turbidity, sensor.awlr, sensor.battery, 1, rssi, ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
         return buffer;
     }
 };

@@ -107,8 +107,12 @@ public:
             bool isPublishSuccess = false;
             while (!isPublishSuccess && millis() - attemptedTimestamp < 15000)
             {
-                isPublishSuccess = Application::networkingTask(
-                    _netCtx, sensorAverage.toCSV(),
+                if (!Application::connectToWiFiTask(_netCtx))
+                    esp_restart(); // Assume hang connecting to WiFi
+
+                SensorLogAggregate agregateData(sensorAverage);
+                isPublishSuccess = Application::connectToMqttTask(
+                    _netCtx, agregateData.toCSV(_netCtx->wifi.getRssi()),
                     [this](CalibrationMode cMode)
                     {
                         _calState = cMode;

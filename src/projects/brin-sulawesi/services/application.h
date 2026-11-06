@@ -12,14 +12,25 @@
 class Application
 {
 public:
-    static bool networkingTask(void *pvParam,
-                               const char *msg, std::function<void(CalibrationMode)> calMode)
+    static bool connectToWiFiTask(void *pvParam)
     {
         NetworkingContext *ctx = static_cast<NetworkingContext *>(pvParam);
         while (WiFi.status() != WL_CONNECTED)
-            ctx->wifi.begin(false); // BLOCKING TIMEOUT 20S
+            if (!ctx->wifi.begin(false))
+            {
+                Serial.println("Timeout 20s triggered, failed to connect WiFi!");
+                return false;
+            }
+        return true;
+    }
 
-        bool isMQTTConnected = ctx->mqtt.connect(GlobalConfig::USERNAME_MQTT, GlobalConfig::PASSWORD_MQTT); // BLOCKING TIMEOUT 20S
+    static bool connectToMqttTask(void *pvParam,
+                                  const char *msg, std::function<void(CalibrationMode)> calMode)
+    {
+        NetworkingContext *ctx = static_cast<NetworkingContext *>(pvParam);
+
+        bool isMQTTConnected = ctx->mqtt.connect(
+            GlobalConfig::USERNAME_MQTT, GlobalConfig::PASSWORD_MQTT); // BLOCKING TIMEOUT 20S
         if (!isMQTTConnected)
         {
             Serial.println("[INFO] MQTT Failed to Connect");
