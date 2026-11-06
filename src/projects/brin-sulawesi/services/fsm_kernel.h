@@ -3,7 +3,6 @@
 
 #include "application.h"
 #include "projects/brin-sulawesi/models/task_context.h"
-#include "projects/brin-sulawesi/utils/enum.h"
 
 class FSMKernel
 {
@@ -83,7 +82,6 @@ public:
             _netCtx->wifi.disableWiFi();
 
             SensorObject sensorData = Application::samplingTask(_sensorCtx);
-            Serial.printf("[INFO] Sampling: %s\n", sensorData.toString());
             _sensorDataList[_sampleCount] = sensorData;
 
             if (!IS_MILLIS)
@@ -104,30 +102,27 @@ public:
             }
 
             const uint32_t attemptedTimestamp = millis();
-            bool isPublishSuccess = false;
-            while (!isPublishSuccess && millis() - attemptedTimestamp < 15000)
+            while (millis() - attemptedTimestamp < 15000)
             {
                 if (!Application::connectToWiFiTask(_netCtx))
                     esp_restart(); // Assume hang connecting to WiFi
 
-                SensorLogAggregate agregateData(sensorAverage);
-                isPublishSuccess = Application::connectToMqttTask(
-                    _netCtx, agregateData.toCSV(_netCtx->wifi.getRssi()),
-                    [this](CalibrationMode cMode)
-                    {
-                        _calState = cMode;
-                    });
-                if (isPublishSuccess)
-                    _sampleCount = 0;
-
-                delay(1000);
+                if (Application::connectToMqttTask(
+                        _netCtx,
+                        [this](CalibrationMode cMode)
+                        {
+                            _calState = cMode;
+                        }))
+                {
+                    SensorLogAggregate agregateData(sensorAverage);
+                    while (!Application::publishMqttTask(
+                        _netCtx,
+                        agregateData.toCSV(_netCtx->wifi.getRssi())))
+                        delay(500); // Backoff retrying
+                }
             }
-
-            if (!isPublishSuccess)
-            {
-                Serial.println("[ERROR] Publish mqtt timed out");
-                _sampleCount = 0;
-            }
+            Serial.println("[ERROR] Publish mqtt timed out");
+            _sampleCount = 0;
         }
 
         static uint32_t attemptLog = millis();

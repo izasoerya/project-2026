@@ -18,14 +18,16 @@ public:
         while (WiFi.status() != WL_CONNECTED)
             if (!ctx->wifi.begin(false))
             {
-                Serial.println("Timeout 20s triggered, failed to connect WiFi!");
+                Serial.println("[ERROR] Timeout 20s triggered, failed to connect WiFi!");
                 return false;
             }
+        Serial.println("[INFO] Connected to WiFi");
         return true;
     }
 
-    static bool connectToMqttTask(void *pvParam,
-                                  const char *msg, std::function<void(CalibrationMode)> calMode)
+    static bool connectToMqttTask(
+        void *pvParam,
+        std::function<void(CalibrationMode)> calMode)
     {
         NetworkingContext *ctx = static_cast<NetworkingContext *>(pvParam);
 
@@ -36,14 +38,7 @@ public:
             Serial.println("[INFO] MQTT Failed to Connect");
             return false;
         }
-
-        bool successPublishData = ctx->mqtt.publish(GlobalConfig::SENSOR_TOPIC, msg);
-        if (!successPublishData)
-        {
-            Serial.println("[ERROR] Failed to publish /data");
-            return false;
-        }
-        Serial.println("[INFO] Success publish /data");
+        Serial.println("[INFO] Connected to MQTT Broker");
 
         ctx->mqtt.subscribe(
             GlobalConfig::OTA_TOPIC,
@@ -87,6 +82,20 @@ public:
             }
             ctx->mqtt.poll();
         }
+        return true;
+    }
+
+    static const bool publishMqttTask(void *pvParam, const char *msg)
+    {
+        NetworkingContext *ctx = static_cast<NetworkingContext *>(pvParam);
+
+        bool successPublishData = ctx->mqtt.publish(GlobalConfig::SENSOR_TOPIC, msg);
+        if (!successPublishData)
+        {
+            Serial.printf("[ERROR] Failed to publish /data:\n%s\n", msg);
+            return false;
+        }
+        Serial.printf("[INFO] Success publish /data:\n%s\n", msg);
         return true;
     }
 
