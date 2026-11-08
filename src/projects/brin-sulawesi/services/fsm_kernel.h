@@ -115,10 +115,15 @@ public:
                         }))
                 {
                     SensorLogAggregate agregateData(sensorAverage);
-                    while (!Application::publishMqttTask(
+                    uint32_t retryTimestamp = millis();
+                    bool isPublishSucccess = Application::publishMqttTask(
                         _netCtx,
-                        agregateData.toCSV(_netCtx->wifi.getRssi())))
+                        agregateData.toCSV(_netCtx->wifi.getRssi()));
+                    while (!isPublishSucccess &&
+                           (millis() - retryTimestamp > 5000)) // Timeout in 5 second
+                    {
                         delay(500); // Backoff retrying
+                    }
                 }
             }
             Serial.println("[ERROR] Publish mqtt timed out");
