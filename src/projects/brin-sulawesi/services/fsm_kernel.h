@@ -135,10 +135,10 @@ public:
         {
             attemptLog = millis();
 
-            Preferences prefs;
-            prefs.begin("app_config", true);
-            const String currentVersion = prefs.getString("version", "");
-            Serial.printf("Current ver: %s\n", currentVersion);
+            // Preferences prefs;
+            // prefs.begin("app_config", true);
+            // const String currentVersion = prefs.getString("version", "");
+            // Serial.printf("Current ver: %s\n", currentVersion);
 
             // if (_sensorCtx->accuINA.readBusVoltage() < GlobalConfig::BATTERY_DANGER)
             //     Serial.println("On a danger position");
