@@ -65,7 +65,7 @@ private:
 public:
     Modbustatics(
         unsigned char id, const char *name,
-        Stream &stream, uint8_t address,
+        Stream &stream, uint16_t address,
         const std::function<float(float)> interceptor = nullptr)
         : BaseSensor(id, name),
           _address(address),
@@ -76,7 +76,7 @@ public:
 
     void begin()
     {
-        _modbusConfig.setSlaveId(1).setFunctionCode(0x03).setAddress(_address).setLengthAddress(1);
+        _modbusConfig.setSlaveId(_id).setFunctionCode(0x03).setAddress(_address).setLengthAddress(1);
     }
 
     float read() override
@@ -92,6 +92,11 @@ public:
         {
             return res.error; // TODO: SHOULD RETURN ACTUAL ERROR INSTEAD OF NUMBER
         }
+    }
+
+    ReadResult rawRead()
+    {
+        return _modbusConfig.read(0);
     }
 };
 

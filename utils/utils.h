@@ -19,18 +19,4 @@ enum WindDirectionEnum
     NORTHWEST = 7
 };
 
-class Utils
-{
-public:
-    static uint16_t toDeciU16(float value)
-    {
-        float scaled = value * 10.0F;
-        if (scaled < 0.0F)
-            return 0;
-        if (scaled > 65535.0F)
-            return 65535;
-        return static_cast<uint16_t>(roundf(scaled));
-    }
-};
-
 #endif // UTILS_H

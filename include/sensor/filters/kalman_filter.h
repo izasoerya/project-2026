@@ -17,7 +17,7 @@ public:
 
     ~KalmanFilter() override = default;
 
-    void filter(float &raw) override
+    float filter(float &raw) override
     {
         // Predict
         _p = _p + _q;
@@ -29,6 +29,7 @@ public:
 
         // Return filtered value
         raw = _x;
+        return raw;
     }
 };
 

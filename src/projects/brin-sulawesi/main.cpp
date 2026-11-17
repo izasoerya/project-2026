@@ -1,41 +1,16 @@
+#include <Arduino.h>
 #include <Preferences.h>
-#include <freertos/FreeRTOS.h>
-#include <ElegantOTA.h>
-#include <WebSerial.h>
 
+#include "consts/global_config.h"
 #include "consts/sensors.h"
-#include "services/application.h"
-#include "services/appstate_parser.h"
+#include "models/profile.h"
+#include "models/task_context.h"
+#include "services/fsm_kernel.h"
 #include "transmitter/configs/wifi_module.h"
-#include "transmitter/configs/mqtt_module.h"
-#include "models/shared_modbus_obj.h"
-
-#define DEVICE_ID 1
-
-const char *ssid = "NodeSensorWiFi1";
-const char *password = "muhammadnabiyullah";
-const char *hostname = "wtq-1";
-WiFiModule inet(ssid, password, hostname, WIFI_POWER_19_5dBm);
-
-const char *usernameMqtt = "";
-const char *passwordMqtt = "";
-const char *brokerMqtt = "";
-MQTTModule mqtt(usernameMqtt, passwordMqtt, brokerMqtt);
-
-Modbustatics *turbSensor = nullptr;
-Modbustatics *awlrSensor = nullptr;
-QueueHandle_t Application::_turbidityQueue = NULL;
-QueueHandle_t Application::_awlrQueue = NULL;
-
-AsyncWebServer server(80);
-CommandHandler handler;
-
-TaskHandle_t mainTaskHandle;
-TaskHandle_t samplingTaskHandle;
-TaskHandle_t calibrateHandle;
 
 void setup()
 {
+    esp_sleep_enable_timer_wakeup(GlobalConfig::DELAY_SAMPLING * 1000ULL); // Configure sleep for 10s
     Preferences prefs;
     prefs.begin("app_config", true);
     const uint8_t firmwareId = prefs.getUChar("id", 0);
@@ -43,85 +18,65 @@ void setup()
     if (firmwareId == 0)
     {
         prefs.begin("app_config", false);
-        prefs.putUChar("id", DEVICE_ID);
+        prefs.putUChar("id", GlobalConfig::deviceID);
         prefs.end();
         esp_restart();
     }
 
     Serial.begin(115200);
-    Serial2.begin(9600);
     Serial.printf("Firmware ID: %u\n", firmwareId);
+    GlobalConfig::mbSerial.begin(9600, SERIAL_8N1, 20, 21);
 
-    for (int i = 0; i < sizeof(turb_list) / sizeof(Modbustatics); i++)
+    const float batteryDangerLevel = 11.75;
+    const float batteryWarningLevel = 12.0;
+    Profile batteryProfileDefault(batteryDangerLevel, batteryWarningLevel);
+
+    static Modbustatics *turbSensor = nullptr;
+    static Modbustatics *awlrSensor = nullptr;
+    static INA226SensorInterface *inaAccuSensor = nullptr;
+    static INA226SensorInterface *inaSolarSensor = nullptr;
+    for (size_t i = 0; i < sizeof(turb_list) / sizeof(turb_list[0]); i++)
     {
-        if (turb_list[i].getId() == firmwareId)
+        if ((turb_list[i].getId() - 10) == firmwareId) // Turbidity id start from 11
             turbSensor = &turb_list[i];
-        if (awlr_list[i].getId() == firmwareId)
+        if ((awlr_list[i].getId() - 0) == firmwareId) // AWLR id start from 1
             awlrSensor = &awlr_list[i];
+        if ((ina_accu_list[i].getId() - 0) == firmwareId) // AWLR id start from 1
+            inaAccuSensor = &ina_accu_list[i];
+        if ((ina_solar_list[i].getId() - 0) == firmwareId) // AWLR id start from 1
+            inaSolarSensor = &ina_solar_list[i];
     }
-    static ApplicationContext ctx; // Mutex lock context variable
-    ctx.state = AppState::NORMAL;
-    ctx.mbTurbidity = turbSensor;
-    ctx.mbAwlr = awlrSensor;
-    prefs.begin("app_config", true);
-    bool mqttRetainOn = prefs.getBool("mqtt_retain_on", 255); // return 255 means no index yet
-    ctx.feature.isMQTTEnabled = mqttRetainOn == 255 ? true : mqttRetainOn;
-    prefs.end();
-    Application::initTask();
+    static SensorContext sensorCtx(*turbSensor, *awlrSensor, *inaAccuSensor, *inaSolarSensor);
 
-    // clang-format off
-    inet.begin( []() { Serial.print("."); },    // On progress
-                []() { esp_restart; });         // On timeout
-    // clang-format on
-    Serial.printf("Connected with: %s\n", inet.localIP());
-    WebSerial.printf("Connected with: %s\n", inet.localIP());
-    if (ctx.feature.isMQTTEnabled)
+    static WiFiModule inet(
+        GlobalConfig::ssid, GlobalConfig::password, GlobalConfig::hostname,
+        wifi_power_t::WIFI_POWER_8_5dBm);
+    static MQTTWebsocketSecure mqtt(GlobalConfig::BROKER_MQTT, GlobalConfig::PORT_MQTT);
+    static NetworkingContext networkCtx(inet, mqtt);
+
+    FSMKernel kernel = FSMKernel(&sensorCtx, &networkCtx);
+    while (1)
     {
-        ctx.mqtt = mqtt.enable();
-        if (!ctx.mqtt->connect())
+        kernel.loop();
+        while (Serial.available() > 0)
         {
-            Serial.println("Failed to connect broker MQTT");
-            WebSerial.println("Failed to connect broker MQTT");
+            String command = Serial.readStringUntil('\n');
+            command.trim();
+
+            if (command == "SUSPEND")
+            {
+                Serial.println("Entering suspended state");
+                GlobalConfig::BATTERY_DANGER = 26.3;
+                GlobalConfig::BATTERY_WARNING = 26.5;
+            }
+            else if (command == "NORMAL")
+            {
+                Serial.println("Entering normal state");
+                GlobalConfig::BATTERY_DANGER = 11;
+                GlobalConfig::BATTERY_WARNING = 12;
+            }
         }
     }
-    else
-    {
-        Serial.println("MQTT is disabled");
-        WebSerial.println("MQTT is disabled");
-    }
-
-    server.begin();
-    ElegantOTA.begin(&server);
-    ElegantOTA.setAutoReboot(true);
-    WebSerial.begin(&server, "/webserial");
-    WebSerial.onMessage(
-        [&](uint8_t *data, size_t len)
-        {
-            ctx.state = handler.parseCommand(data, len);
-            if (ctx.state == AppState::SET_FEATURE)
-            {
-                FeaturesEnum feature = handler.parseFeatureCommand(data, len);
-                if (feature == FeaturesEnum::MQTT_RETAIN_ON || feature == FeaturesEnum::MQTT_RETAIN_OFF)
-                {
-                    prefs.begin("app_config", false);
-                    prefs.putBool("mqtt_retain_on",
-                                  feature == FeaturesEnum::MQTT_RETAIN_ON ? true : false);
-                    prefs.end();
-                }
-                else if (feature == FeaturesEnum::MQTT_ON || feature == FeaturesEnum::MQTT_OFF)
-                {
-                    ctx.feature.isMQTTEnabled = feature == FeaturesEnum::MQTT_ON ? true : false;
-                    if (ctx.feature.isMQTTEnabled)
-                        ctx.mqtt = mqtt.enable();
-                    else if (!ctx.feature.isMQTTEnabled)
-                        ctx.mqtt->disable(&ctx.mqtt);
-                }
-            }
-        });
-
-    xTaskCreate(Application::mainTask, "main task", 8192, &ctx, 1, &mainTaskHandle);
-    xTaskCreate(Application::samplingTask, "sampling task", 8192, &ctx, 1, &samplingTaskHandle);
-    xTaskCreate(Application::calibrateTask, "calibrate turbidity", 4096, &ctx, 1, &calibrateHandle);
 }
 
-void loop() { vTaskDelay(portMAX_DELAY); }
+void loop() {}

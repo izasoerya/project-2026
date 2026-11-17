@@ -2,6 +2,7 @@
 #define APP_STATE_PARSER
 
 #include <cstring>
+#include "../consts/global_config.h"
 
 enum AppState
 {
@@ -10,6 +11,22 @@ enum AppState
     CALIBRATE_ARR,
     SET_FEATURE,
     APP_STATE_UNKNOWN
+};
+
+enum ApplicationState
+{
+    UNKNOWN_APPLICATION_STATE = 0,
+    SAMPLING_STATE,
+    PUBLISH_STATE,
+    SUSPEND_STATE,
+};
+
+enum BatteryState
+{
+    UNKNOWN_BATTERY_STATE = 0,
+    SAFE_STATE,
+    WARNING_STATE,
+    DANGER_STATE
 };
 
 enum FeaturesEnum
@@ -21,58 +38,13 @@ enum FeaturesEnum
     FEATURES_UNKNOWN
 };
 
-class CommandHandler
+enum CalibrationMode
 {
-private:
-public:
-    CommandHandler() {}
-    ~CommandHandler() {}
-
-    AppState parseCommand(uint8_t *data, size_t len)
-    {
-        const uint8_t MAX_WINDOW = 64;
-        static char d[MAX_WINDOW] = {0};
-        if (len < MAX_WINDOW - 1)
-        {
-            memcpy(d, data, len);
-            d[len] = '\0';
-            while (len > 0 && isspace(d[len - 1]))
-                d[--len] = '\0';
-
-            if (strcmp(d, "APP_NORMAL") == 0)
-                return AppState::NORMAL;
-            else if (strcmp(d, "APP_CALIBRATE_TURBIDITY") == 0)
-                return AppState::CALIBRATE_TURBIDITY;
-            else if (strcmp(d, "APP_CALIBRATE_ARR") == 0)
-                return AppState::CALIBRATE_ARR;
-            else if (strstr(d, "FEAT"))
-                return AppState::SET_FEATURE;
-        }
-        return AppState::APP_STATE_UNKNOWN;
-    }
-
-    FeaturesEnum parseFeatureCommand(uint8_t *data, size_t len)
-    {
-        const uint8_t MAX_WINDOW = 64;
-        static char d[MAX_WINDOW] = {0};
-        if (len < MAX_WINDOW - 1)
-        {
-            memcpy(d, data, len);
-            d[len] = '\0';
-            while (len > 0 && isspace(d[len - 1]))
-                d[--len] = '\0';
-
-            if (strcmp(d, "FEAT_MQTT_RETAIN_ON") == 0)
-                return FeaturesEnum::MQTT_RETAIN_ON;
-            else if (strcmp(d, "FEAT_MQTT_RETAIN_OFF") == 0)
-                return FeaturesEnum::MQTT_RETAIN_OFF;
-            else if (strcmp(d, "FEAT_MQTT_ON") == 0)
-                return FeaturesEnum::MQTT_ON;
-            else if (strcmp(d, "FEAT_MQTT_OFF") == 0)
-                return FeaturesEnum::MQTT_OFF;
-        }
-        return FeaturesEnum::FEATURES_UNKNOWN;
-    }
+    CAL_UNKNOWN = 0,
+    CAL_TURBIDITY,
+    CAL_WATER_LEVEL,
+    CAL_TEMPERATURE,
+    CAL_ALL
 };
 
 #endif // APP_STATE_PARSER

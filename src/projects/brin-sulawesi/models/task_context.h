@@ -1,0 +1,72 @@
+#if !defined(SHARED_MODBUS_OBJECT_H)
+#define SHARED_MODBUS_OBJECT_H
+
+#include <sensor/configs/modbus_sensor.h>
+#include "sensor/configs/ina226_sensor.h"
+#include "../services/appstate_parser.h"
+#include "../models/profile.h"
+#include "transmitter/configs/mqtt_module.h"
+#include "transmitter/configs/wifi_module.h"
+
+struct FeatureState
+{
+    bool isMQTTEnabled;
+    bool isMQTTAlwaysEnabled;
+};
+
+struct SensorContext
+{
+    const uint8_t PIN_SDA = 6;
+    const uint8_t PIN_SCL = 7;
+
+    Modbustatics &turbidity;
+    Modbustatics &awlr;
+    INA226SensorInterface &accuINA;
+    INA226SensorInterface &solarINA;
+
+    SensorContext(Modbustatics &t, Modbustatics &l, INA226SensorInterface &accu, INA226SensorInterface &solar)
+        : turbidity(t), awlr(l), accuINA(accu), solarINA(solar) {}
+};
+
+struct NetworkingContext
+{
+    const char *ssid = GlobalConfig::ssid;
+    const char *password = GlobalConfig::password;
+    char hostname[32];
+
+    WiFiModule &wifi;
+    BaseMQTT &mqtt;
+
+    NetworkingContext(WiFiModule &w, BaseMQTT &m) : wifi(w), mqtt(m)
+    {
+        snprintf(hostname, sizeof(hostname), "%s-%d", GlobalConfig::hostname, GlobalConfig::deviceID);
+    }
+};
+
+struct MQTTContext
+{
+    static void onMessage(const char *topic, const char *payload) {}
+};
+
+struct ApplicationContext
+{
+    volatile AppState state;
+    Modbustatics *mbTurbidity;
+    Modbustatics *mbAwlr;
+    FeatureState feature;
+    Profile *batteryProfile;
+    SemaphoreHandle_t mutex;
+
+    ApplicationContext()
+    {
+        state = AppState::NORMAL;
+        mbTurbidity = nullptr;
+        mbAwlr = nullptr;
+        feature.isMQTTEnabled = true;
+        feature.isMQTTAlwaysEnabled = true;
+        batteryProfile = nullptr;
+        mutex = xSemaphoreCreateMutex();
+    }
+};
+
+#endif // SHARED_MODBUS_OBJECT_H

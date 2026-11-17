@@ -1,122 +1,127 @@
 #if !defined(APPLICATION_H)
 #define APPLICATION_H
 
-#include <ElegantOTA.h>
-#include <WebSerial.h>
-
+#include <ArduinoJson.h>
+#include <Preferences.h>
 #include "../consts/sensors.h"
-#include "../models/shared_modbus_obj.h"
+#include "../models/task_context.h"
+#include "../models/datastore.h"
+#include "ota/http_ota.h"
+#include "mqtt_cmd_parser.h"
 
 class Application
 {
-private:
-    static QueueHandle_t _turbidityQueue;
-    static QueueHandle_t _awlrQueue;
-
 public:
-    static void initTask()
+    static bool connectToWiFiTask(void *pvParam)
     {
-        _turbidityQueue = xQueueCreate(10, sizeof(float));
-        _awlrQueue = xQueueCreate(10, sizeof(float));
+        NetworkingContext *ctx = static_cast<NetworkingContext *>(pvParam);
+        while (WiFi.status() != WL_CONNECTED)
+            if (!ctx->wifi.begin(false))
+            {
+                Serial.println("[ERROR] Timeout 20s triggered, failed to connect WiFi!");
+                return false;
+            }
+        Serial.println("[INFO] Connected to WiFi");
+        return true;
     }
 
-    static void mainTask(void *pvParam)
+    static bool connectToMqttTask(
+        void *pvParam,
+        std::function<void(CalibrationMode)> calMode)
     {
-        float receivedTurbidity = 0;
-        float receivedAwlr = 0;
+        NetworkingContext *ctx = static_cast<NetworkingContext *>(pvParam);
 
-        TickType_t prevLog = xTaskGetTickCount();
-        while (1)
+        bool isMQTTConnected = ctx->mqtt.connect(
+            GlobalConfig::USERNAME_MQTT, GlobalConfig::PASSWORD_MQTT); // BLOCKING TIMEOUT 20S
+        if (!isMQTTConnected)
         {
-            ElegantOTA.loop();
-            WebSerial.loop();
-
-            ApplicationContext *ctx = static_cast<ApplicationContext *>(pvParam);
-            if (ctx->state == AppState::NORMAL)
-            {
-                if (xQueueReceive(_turbidityQueue, &receivedTurbidity, 0) == pdPASS)
-                {
-                }
-
-                if (xQueueReceive(_awlrQueue, &receivedAwlr, 0) == pdPASS)
-                {
-                }
-
-                ctx->mqtt->reconnect();
-
-                if ((xTaskGetTickCount() - prevLog) >= pdMS_TO_TICKS(10 * 1000))
-                {
-                    prevLog = xTaskGetTickCount();
-
-                    char buffer[128];
-                    snprintf(buffer, sizeof(buffer),
-                             "Turbidity: %.1f | AWLR: %.1f",
-                             receivedTurbidity, receivedAwlr);
-                    if (ctx->feature.isMQTTEnabled)
-                    {
-                        uint16_t res = ctx->mqtt->publish("/test", buffer);
-                        if (res == 0)
-                        {
-                            Serial.println("MQTT Publish Failed");
-                            WebSerial.println("MQTT Publish Failed");
-                        }
-                    }
-                    Serial.printf("Success Publish: %s\n", buffer);
-                    WebSerial.printf("Success Publish: %s\n", buffer);
-                }
-
-                vTaskDelay(20 / portTICK_PERIOD_MS);
-            }
+            Serial.println("[INFO] MQTT Failed to Connect");
+            return false;
         }
+        Serial.println("[INFO] Connected to MQTT Broker");
+
+        ctx->mqtt.subscribe(
+            GlobalConfig::OTA_TOPIC,
+            [ctx](const char *msg, const size_t len)
+            {
+                bool success = MQTTCommandParser::otaCallback(msg, len);
+                if (success)
+                {
+                    ctx->mqtt.publish(GlobalConfig::OTA_RESPONSE_TOPIC, "SUCCESS");
+                    delay(1000); // Without this publish won't get sent
+                    esp_restart();
+                }
+            });
+        ctx->mqtt.subscribe(
+            GlobalConfig::PING_TOPIC,
+            [ctx](const char *msg, const size_t len)
+            {
+                const char *res = MQTTCommandParser::pingCallback(msg, len);
+                ctx->mqtt.publish(GlobalConfig::PING_RESPONSE_TOPIC, res);
+            });
+        ctx->mqtt.subscribe(
+            GlobalConfig::CMD_TOPIC,
+            [ctx, calMode](const char *msg, const size_t len)
+            {
+                const char *res = MQTTCommandParser::cmdCallback(msg, len, calMode);
+                ctx->mqtt.publish(GlobalConfig::CMD_RESPONSE_TOPIC, res);
+            });
+
+        uint32_t attemptSubscribed = millis();
+        while (millis() - attemptSubscribed <= 5000)
+        {
+            if (!ctx->mqtt.isConnected())
+            {
+                static unsigned long lastReconnect = 0;
+                if (millis() - lastReconnect > 5000)
+                {
+                    Serial.println("[INFO] Reconnecting MQTT...");
+                    lastReconnect = millis();
+                    ctx->mqtt.connect(GlobalConfig::USERNAME_MQTT, GlobalConfig::PASSWORD_MQTT);
+                }
+            }
+            ctx->mqtt.poll();
+        }
+        return true;
     }
 
-    static void samplingTask(void *pvParam)
+    static const bool publishMqttTask(void *pvParam, const char *msg)
     {
-        ApplicationContext *ctx = static_cast<ApplicationContext *>(pvParam);
-        while (1)
-        {
-            if (ctx->state == AppState::NORMAL)
-            {
-                float turbidityRead = ctx->mbTurbidity->read();
-                float awlrRead = ctx->mbAwlr->read();
+        NetworkingContext *ctx = static_cast<NetworkingContext *>(pvParam);
 
-                xQueueSend(_turbidityQueue, &turbidityRead, pdMS_TO_TICKS(10));
-                xQueueSend(_awlrQueue, &awlrRead, pdMS_TO_TICKS(10));
-            }
-            vTaskDelay(200 / portTICK_PERIOD_MS);
+        bool successPublishData = ctx->mqtt.publish(GlobalConfig::SENSOR_TOPIC, msg);
+        if (!successPublishData)
+        {
+            Serial.printf("[ERROR] Failed to publish /data:\n%s\n", msg);
+            return false;
         }
+        Serial.printf("[INFO] Success publish /data:\n%s\n", msg);
+        return true;
     }
 
-    static void calibrateTask(void *pvParam)
+    static SensorObject samplingTask(void *pvParam)
     {
-        const size_t MAX_WINDOW = 30;
-        uint8_t counter = 0;
-        uint16_t val[MAX_WINDOW];
+        SensorContext *ctx = static_cast<SensorContext *>(pvParam);
 
-        ApplicationContext *ctx = static_cast<ApplicationContext *>(pvParam);
-        while (1)
-        {
-            if (ctx->state == AppState::CALIBRATE_TURBIDITY)
-            {
-                val[counter] = ctx->mbTurbidity->read();
-                counter++;
-            }
-            else if (ctx->state == AppState::CALIBRATE_ARR)
-            {
-                val[counter] = ctx->mbAwlr->read();
-                counter++;
-            }
+        // ReadResult resTurbidity = ctx->turbidity.rawRead();
+        // ReadResult resAwlr = ctx->awlr.rawRead();
+        // float batteryRead = analogRead(A10);
 
-            if (counter >= 30)
-            {
-                Serial.print("array = [");
-                for (uint8_t i = 0; i < MAX_WINDOW; i++)
-                    Serial.printf("%d, ", val[i]);
-                Serial.println("]");
-                counter = 0;
-            }
-            vTaskDelay(50 / portTICK_PERIOD_MS);
-        }
+        // float turbidity, waterLevel;
+        // if (resTurbidity.isOk())
+        //     turbidity = resTurbidity.value;
+        // if (resAwlr.isOk())
+        //     waterLevel = resAwlr.value;
+
+        // Wire.begin(PIN_SDA, PIN_SCL);
+        // accuINA.begin();
+        // solarINA.begin();
+
+        SensorObject sensor = SensorObject{
+            .turbidity = random(10000) / 10.0F,
+            .awlr = 22,
+            .battery = 2.3};
+        return sensor;
     }
 };
 

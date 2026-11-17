@@ -28,7 +28,7 @@ public:
     }
     ~MovingAverageFilter() override = default;
 
-    void filter(float &raw) override
+    float filter(float &raw) override
     {
         _buffer[_index] = raw;
         _index = (_index + 1) % _windowSize;
@@ -37,6 +37,7 @@ public:
         for (uint8_t i = 0; i < _windowSize; i++)
             sum += _buffer[i];
         raw = sum / _windowSize;
+        return raw;
     }
 };
 
@@ -56,6 +57,8 @@ private:
     uint8_t _trim;
     uint8_t _index = 0;
 
+    float _value = 0;
+
 public:
     TrimmedMovingAverage(uint8_t windowSize = 20, uint8_t trim = 5)
         : _windowSize(windowSize), _trim(trim)
@@ -68,7 +71,7 @@ public:
     }
     ~TrimmedMovingAverage() override = default;
 
-    void filter(float &raw) override
+    float filter(float &raw) override
     {
         _buffer[_index] = raw;
         _index = (_index + 1) % _windowSize;
@@ -81,7 +84,11 @@ public:
         for (int i = _trim; i < _windowSize - _trim; i++)
             sum += _sortBuffer[i];
         raw = sum / (_windowSize - 2 * _trim);
+        _value = raw;
+        return _value;
     }
+
+    float getValue() { return _value; }
 };
 
 #endif // MOVING_AVERAGE
