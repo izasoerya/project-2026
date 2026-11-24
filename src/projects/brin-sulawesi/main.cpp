@@ -11,6 +11,7 @@
 void setup()
 {
     esp_sleep_enable_timer_wakeup(GlobalConfig::DELAY_SAMPLING * 1000ULL); // Configure sleep for 10s
+
     Preferences prefs;
     prefs.begin("app_config", true);
     const uint8_t firmwareId = prefs.getUChar("id", 0);
@@ -23,14 +24,11 @@ void setup()
         esp_restart();
     }
 
-    Serial.begin(115200);
-    Serial.printf("Firmware ID: %u\n", firmwareId);
-    GlobalConfig::mbSerial.begin(9600, SERIAL_8N1, 20, 21);
-
     const float batteryDangerLevel = 11.75;
     const float batteryWarningLevel = 12.0;
     Profile batteryProfileDefault(batteryDangerLevel, batteryWarningLevel);
 
+    GlobalConfig::mbSerial.begin(9600, SERIAL_8N1, 20, 21);
     static Modbustatics *turbSensor = nullptr;
     static Modbustatics *awlrSensor = nullptr;
     static INA226SensorInterface *inaAccuSensor = nullptr;
@@ -41,9 +39,9 @@ void setup()
             turbSensor = &turb_list[i];
         if ((awlr_list[i].getId() - 0) == firmwareId) // AWLR id start from 1
             awlrSensor = &awlr_list[i];
-        if ((ina_accu_list[i].getId() - 0) == firmwareId) // AWLR id start from 1
+        if ((ina_accu_list[i].getId() - 0) == firmwareId) // INA id start from 1
             inaAccuSensor = &ina_accu_list[i];
-        if ((ina_solar_list[i].getId() - 0) == firmwareId) // AWLR id start from 1
+        if ((ina_solar_list[i].getId() - 0) == firmwareId) // INA id start from 1
             inaSolarSensor = &ina_solar_list[i];
     }
     static SensorContext sensorCtx(*turbSensor, *awlrSensor, *inaAccuSensor, *inaSolarSensor);
@@ -56,27 +54,7 @@ void setup()
 
     FSMKernel kernel = FSMKernel(&sensorCtx, &networkCtx);
     while (1)
-    {
         kernel.loop();
-        while (Serial.available() > 0)
-        {
-            String command = Serial.readStringUntil('\n');
-            command.trim();
-
-            if (command == "SUSPEND")
-            {
-                Serial.println("Entering suspended state");
-                GlobalConfig::BATTERY_DANGER = 26.3;
-                GlobalConfig::BATTERY_WARNING = 26.5;
-            }
-            else if (command == "NORMAL")
-            {
-                Serial.println("Entering normal state");
-                GlobalConfig::BATTERY_DANGER = 11;
-                GlobalConfig::BATTERY_WARNING = 12;
-            }
-        }
-    }
 }
 
 void loop() {}
