@@ -56,7 +56,7 @@ public:
     const char *getPassword() { return _password; }
 
     bool isConnected() { return _mqttClient.isConnected(); }
-    bool disconnect() { return _mqttClient.disconnect(); }
+
     virtual bool poll() { return _mqttClient.update(); }
 
     virtual bool connect(const char *username, const char *password, const char *id = "default-client") = 0;
@@ -77,6 +77,8 @@ public:
     {
         return _mqttClient.publish(topic, msg, retain, qos);
     }
+
+    virtual void close() = 0;
 };
 
 class MQTTBasic : public BaseMQTT
@@ -124,6 +126,12 @@ public:
                 return false;
         }
         return _connectToMQTT(id, getUsername(), getPassword());
+    }
+
+    void close() override
+    {
+        if (_mqttClient.isConnected())
+            _mqttClient.disconnect();
     }
 };
 
@@ -181,6 +189,12 @@ public:
         }
         return _connectToMQTT(id, getUsername(), getPassword());
     }
+
+    void close() override
+    {
+        if (_mqttClient.isConnected())
+            _mqttClient.disconnect();
+    }
 };
 
 class MQTTWebsocket : public BaseMQTT
@@ -230,6 +244,14 @@ public:
     {
         _wsclient.loop();
         return _mqttClient.update();
+    }
+
+    void close() override
+    {
+        if (_mqttClient.isConnected())
+            _mqttClient.disconnect();
+        if (_wsclient.isConnected())
+            _wsclient.disconnect();
     }
 };
 
@@ -282,6 +304,14 @@ public:
     {
         _wsclient.loop();
         return _mqttClient.update();
+    }
+
+    void close() override
+    {
+        if (_mqttClient.isConnected())
+            _mqttClient.disconnect();
+        if (_wsclient.isConnected())
+            _wsclient.disconnect();
     }
 };
 
