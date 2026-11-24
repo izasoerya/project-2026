@@ -7,7 +7,9 @@
 class FSMKernel
 {
 private:
-    const bool IS_MILLIS = true;
+    static const bool SLEEP_MODE = false;         // Set true for sleep
+    static const uint8_t MAX_TICK_PUBLISH = 6;    // How many tick until publish state
+    static const uint8_t MAX_RETRIES_PUBLISH = 3; // Maximum allowed attempt retries publish MQTT
 
     // State holder variable
     ApplicationState _appState = ApplicationState::SAMPLING_STATE;
@@ -19,9 +21,9 @@ private:
     NetworkingContext *_netCtx;
 
     // Peripheral for small task
-    uint8_t _sampleCount = 0;
-    const uint8_t _sampleTarget = 3;
-    SensorObject _sensorDataList[8];
+    uint8_t _tick = 0;
+    SensorObject _sensorDatas[MAX_TICK_PUBLISH];
+    bool _mqttPublishTimeout = false;
 
 public:
     FSMKernel(SensorContext *sensorCtx, NetworkingContext *netCtx)
@@ -49,9 +51,10 @@ public:
         }
 
         // Main Application State Driver
-        if (_sampleCount < _sampleTarget && _appState != ApplicationState::SUSPEND_STATE)
+        if (_tick < MAX_TICK_PUBLISH && _appState != ApplicationState::SUSPEND_STATE)
             _appState = ApplicationState::SAMPLING_STATE;
-        else if (_sampleCount >= _sampleTarget && _appState != ApplicationState::SUSPEND_STATE)
+
+        else if (_tick >= MAX_TICK_PUBLISH && _appState != ApplicationState::SUSPEND_STATE)
             _appState = ApplicationState::PUBLISH_STATE;
 
         // Sub-kernel driver (Blocking)
@@ -82,23 +85,21 @@ public:
             _netCtx->wifi.disableWiFi();
 
             SensorObject sensorData = Application::samplingTask(_sensorCtx);
-            _sensorDataList[_sampleCount] = sensorData;
+            _sensorDatas[_tick++] = sensorData;
 
-            if (!IS_MILLIS)
+            if (SLEEP_MODE)
                 esp_light_sleep_start();
             else
                 delay(10000);
-
-            _sampleCount++;
         }
         else if (_appState == ApplicationState::PUBLISH_STATE)
         {
             SensorObject sensorAverage{};
-            for (uint8_t i = 0; i < _sampleCount; i++)
+            for (uint8_t i = 0; i < _tick; i++)
             {
-                (sensorAverage.turbidity += _sensorDataList[i].turbidity) /= 2;
-                (sensorAverage.awlr += _sensorDataList[i].awlr) /= 2;
-                (sensorAverage.battery += _sensorDataList[i].battery) /= 2;
+                (sensorAverage.turbidity += _sensorDatas[i].turbidity) /= 2;
+                (sensorAverage.awlr += _sensorDatas[i].awlr) /= 2;
+                (sensorAverage.battery += _sensorDatas[i].battery) /= 2;
             }
 
             const uint32_t attemptedTimestamp = millis();
@@ -121,25 +122,12 @@ public:
                         agregateData.toCSV(_netCtx->wifi.getRssi()));
                     while (!isPublishSucccess &&
                            (millis() - retryTimestamp > 5000)) // Timeout in 5 second
-                    {
-                        delay(500); // Backoff retrying
-                    }
+                        delay(500);                            // Backoff retrying
+                    _mqttPublishTimeout = false;
                 }
             }
-            Serial.println("[ERROR] Publish mqtt timed out");
-            _sampleCount = 0;
-        }
-
-        static uint32_t attemptLog = millis();
-        if (millis() - attemptLog > 3000)
-        {
-            attemptLog = millis();
-
-            // if (_sensorCtx->accuINA.readBusVoltage() < GlobalConfig::BATTERY_DANGER)
-            //     Serial.println("On a danger position");
-            // else if (_sensorCtx->accuINA.readBusVoltage() > GlobalConfig::BATTERY_DANGER &&
-            //          _sensorCtx->accuINA.readBusVoltage() < GlobalConfig::BATTERY_WARNING)
-            //     Serial.println("On a warning position");
+            _mqttPublishTimeout = true;
+            _tick = 0;
         }
     }
 };
