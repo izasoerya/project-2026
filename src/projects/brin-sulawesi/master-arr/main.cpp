@@ -21,7 +21,7 @@ void setup()
     static Modbustatics *arrSensor = nullptr;
     static INA226SensorInterface *inaAccuSensor = nullptr;
     static INA226SensorInterface *inaSolarSensor = nullptr;
-    for (size_t i = 0; i < sizeof(arr_list) / sizeof(arr_list[0]); i++)
+    for (uint8_t i = 0; i < GlobalConfig::DEVICE_COUNT; i++)
     {
         if ((arr_list[i].getId()) == GlobalConfig::DEVICE_ID) // Turbidity id start from 11
             arrSensor = &arr_list[i];
