@@ -1,0 +1,50 @@
+#if !defined(APP_STATE_PARSER)
+#define APP_STATE_PARSER
+
+#include <cstring>
+#include "../consts/global_config.h"
+
+enum AppState
+{
+    NORMAL = 0,
+    CALIBRATE_TURBIDITY,
+    CALIBRATE_ARR,
+    SET_FEATURE,
+    APP_STATE_UNKNOWN
+};
+
+enum ApplicationState
+{
+    UNKNOWN_APPLICATION_STATE = 0,
+    SAMPLING_STATE,
+    PUBLISH_STATE,
+    SUSPEND_STATE,
+};
+
+enum BatteryState
+{
+    UNKNOWN_BATTERY_STATE = 0,
+    SAFE_STATE,
+    WARNING_STATE,
+    DANGER_STATE
+};
+
+enum FeaturesEnum
+{
+    MQTT_RETAIN_ON = 0,
+    MQTT_RETAIN_OFF,
+    MQTT_ON,
+    MQTT_OFF,
+    FEATURES_UNKNOWN
+};
+
+enum CalibrationMode
+{
+    CAL_UNKNOWN = 0,
+    CAL_TURBIDITY,
+    CAL_WATER_LEVEL,
+    CAL_TEMPERATURE,
+    CAL_ALL
+};
+
+#endif // APP_STATE_PARSER
