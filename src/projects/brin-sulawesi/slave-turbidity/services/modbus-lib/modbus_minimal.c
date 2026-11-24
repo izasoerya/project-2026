@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include "modbus_minimal.h"
 
 /* Standard Modbus CRC-16 */
@@ -18,11 +19,32 @@ static uint16_t modbus_crc(const uint8_t *buf, uint16_t len)
     return crc;
 }
 
-void modbus_init(modbus_t *mb, uint8_t slave_id)
+void modbus_init(modbus_t *mb, uint8_t slave_id, uint8_t dePin)
 {
     mb->slave_id = slave_id;
+    mb->de_pin = dePin;
+    mb->write_validator = 0;
     for (int i = 0; i < MODBUS_MAX_REGS; i++)
         mb->holding_regs[i] = 0;
+
+    if (mb->de_pin != MODBUS_DE_PIN_NONE)
+    {
+        pinMode(mb->de_pin, OUTPUT);
+        digitalWrite(mb->de_pin, LOW); /* Default to receive mode */
+    }
+}
+
+void modbus_set_transmit(modbus_t *mb, uint8_t transmit)
+{
+    if (mb->de_pin == MODBUS_DE_PIN_NONE)
+        return;
+
+    digitalWrite(mb->de_pin, transmit ? HIGH : LOW);
+}
+
+void modbus_set_write_validator(modbus_t *mb, modbus_write_validator_t validator)
+{
+    mb->write_validator = validator;
 }
 
 void modbus_write_holding(modbus_t *mb, uint16_t addr, uint16_t val)
@@ -119,6 +141,20 @@ uint16_t modbus_process(modbus_t *mb, const uint8_t *rx_buf, uint16_t rx_len, ui
         }
 
         uint16_t value = ((uint16_t)rx_buf[4] << 8) | rx_buf[5];
+
+        uint8_t reject = mb->write_validator ? mb->write_validator(target_addr, value) : 0;
+        if (reject)
+        {
+            tx_buf[0] = mb->slave_id;
+            tx_buf[1] = function | 0x80;
+            tx_buf[2] = _modbus_exception_generator(reject);
+            uint16_t reject_crc = modbus_crc(tx_buf, 3);
+            tx_buf[3] = reject_crc & 0xFF;
+            tx_buf[4] = reject_crc >> 8;
+
+            return 5;
+        }
+
         mb->holding_regs[target_addr] = value;
         for (uint8_t write_reg_iter = 0; write_reg_iter < 8; write_reg_iter++)
             tx_buf[write_reg_iter] = rx_buf[write_reg_iter];
