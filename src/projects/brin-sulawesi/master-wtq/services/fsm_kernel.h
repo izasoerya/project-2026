@@ -2,7 +2,7 @@
 #define DEEP_SLEEP_KERNEL_H
 
 #include "application.h"
-#include "projects/brin-sulawesi/models/task_context.h"
+#include "../models/task_context.h"
 
 class FSMKernel
 {

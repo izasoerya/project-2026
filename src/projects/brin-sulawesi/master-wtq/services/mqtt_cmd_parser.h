@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include "transmitter/configs/mqtt_module.h"
-#include "projects/brin-sulawesi/consts/global_config.h"
+#include "../consts/global_config.h"
 #include <Preferences.h>
 #include <ota/http_ota.h>
 
