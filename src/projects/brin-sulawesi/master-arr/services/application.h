@@ -106,7 +106,7 @@ public:
         ReadResult resTipping = ctx->rainFall.rawRead();
 
         bool statusI2C = Wire.begin(ctx->PIN_SDA, ctx->PIN_SCL);
-        bool statusAccu, statusSolar;
+        bool statusAccu = false, statusSolar = false;
         if (statusI2C)
         {
             statusAccu = ctx->accuINA.begin();
@@ -117,6 +117,7 @@ public:
             .tipping = static_cast<float>(resTipping.isOk() ? resTipping.value : -resTipping.error),
             .voltAccu = statusAccu ? ctx->accuINA.readBusVoltage() : -0xE2,
             .voltPanel = statusSolar ? ctx->solarINA.readBusVoltage() : -0xE2};
+        Serial.printf("[INFO] Sensor Data: %s\n", sensor.toString());
         return sensor;
     }
 };
