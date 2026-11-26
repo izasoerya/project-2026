@@ -103,6 +103,7 @@ public:
     {
         SensorContext *ctx = static_cast<SensorContext *>(pvParam);
 
+        ctx->rainFall.begin();
         ReadResult resTipping = ctx->rainFall.rawRead();
 
         bool statusI2C = Wire.begin(ctx->PIN_SDA, ctx->PIN_SCL);
