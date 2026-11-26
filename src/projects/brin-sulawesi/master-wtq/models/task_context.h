@@ -39,7 +39,7 @@ struct NetworkingContext
 
     NetworkingContext(WiFiModule &w, BaseMQTT &m) : wifi(w), mqtt(m)
     {
-        snprintf(hostname, sizeof(hostname), "%s-%d", GlobalConfig::hostname, GlobalConfig::DEVICE_ID);
+        snprintf(hostname, sizeof(hostname), "%s", GlobalConfig::hostname);
     }
 };
 
