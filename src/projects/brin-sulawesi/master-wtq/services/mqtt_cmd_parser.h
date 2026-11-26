@@ -5,8 +5,8 @@
 #include <ArduinoJson.h>
 #include "transmitter/configs/mqtt_module.h"
 #include "../consts/global_config.h"
-#include <Preferences.h>
 #include <ota/http_ota.h>
+#include "db.h"
 
 class MQTTCommandParser
 {
@@ -31,7 +31,7 @@ public:
         if (msg == nullptr || len == 0)
         {
             Serial.println("[ERROR] Empty command payload");
-            return "";
+            return false;
         }
 
         JsonDocument doc;
@@ -39,18 +39,20 @@ public:
         if (parseError)
         {
             Serial.printf("[ERROR] Invalid command payload: %s\n", parseError.c_str());
-            return "";
+            return false;
         }
         const char *url = doc["url"];
         const char *version = doc["version"];
+        if (url == nullptr || version == nullptr)
+        {
+            Serial.println("[ERROR] OTA payload requires url and version");
+            return false;
+        }
 
-        Preferences prefs;
-        prefs.begin("app_config", true);
-        const String currentVersion = prefs.getString("version", "");
-        prefs.end();
+        const String currentVersion = DB::getVersion();
         if (currentVersion == version)
         {
-            Serial.printf("[INFO] Already on newest version: %s\n", currentVersion);
+            Serial.printf("[INFO] Already on newest version: %s\n", currentVersion.c_str());
             return false;
         }
 
@@ -58,7 +60,10 @@ public:
         OTARequest ota(false, true);
         bool successOTA = ota.beginInsecure(url, currentVersion.c_str(), version);
         if (successOTA)
+        {
+            DB::saveVersion(version);
             return true;
+        }
         Serial.println("[INFO] Failed to update");
         return false;
     }
@@ -95,6 +100,34 @@ public:
             command = &commandDoc;
         }
 
+        JsonDocument ackDoc;
+        static char response[128];
+
+        // Interval command has no "type": payload is {"set_interval": <ms>}
+        JsonVariant intervalField = (*command)["set_interval"];
+        if (!intervalField.isNull())
+        {
+            ackDoc["commandId"] = uuid;
+            if (!intervalField.is<uint32_t>() || intervalField.as<uint32_t>() == 0)
+            {
+                Serial.println("[ERROR] set_interval requires a positive integer value");
+                ackDoc["success"] = false;
+                ackDoc["message"] = "Invalid set_interval value";
+                serializeJson(ackDoc, response);
+                return response;
+            }
+
+            const uint32_t intervalMs = intervalField.as<uint32_t>();
+            const bool saved = DB::saveInterval(intervalMs);
+            Serial.printf("[INFO] MQTT CMD SET INTERVAL: %lu ms (%s)\n",
+                          (unsigned long)intervalMs, saved ? "saved" : "save FAILED");
+
+            ackDoc["success"] = saved;
+            ackDoc["message"] = saved ? "Interval updated" : "Failed to save interval";
+            serializeJson(ackDoc, response);
+            return response;
+        }
+
         const char *type = (*command)["type"];
         if (type == nullptr)
         {
@@ -102,8 +135,6 @@ public:
             return "";
         }
 
-        JsonDocument ackDoc;
-        static char response[128];
         if (strcmp(type, "reset") == 0)
         {
             Serial.println("[INFO] MQTT CMD RESET");
@@ -124,6 +155,40 @@ public:
             ackDoc["message"] = "FINE";
             serializeJson(ackDoc, response);
 
+            return response;
+        }
+        else if (strcmp(type, "set_profile") == 0)
+        {
+            Serial.println("[INFO] MQTT CMD SET PROFILE");
+
+            ackDoc["commandId"] = uuid;
+            if (!(*command)["bottom"].is<float>() || !(*command)["top"].is<float>())
+            {
+                Serial.println("[ERROR] set_profile requires numeric 'bottom' and 'top'");
+                ackDoc["success"] = false;
+                ackDoc["message"] = "Invalid profile";
+                serializeJson(ackDoc, response);
+                return response;
+            }
+
+            const float bottom = (*command)["bottom"];
+            const float top = (*command)["top"];
+            if (bottom >= top)
+            {
+                Serial.println("[ERROR] set_profile requires bottom < top");
+                ackDoc["success"] = false;
+                ackDoc["message"] = "bottom must be lower than top";
+                serializeJson(ackDoc, response);
+                return response;
+            }
+
+            const bool saved = DB::saveProfile(bottom, top);
+            Serial.printf("[INFO] Profile bottom=%.2f top=%.2f (%s)\n", bottom, top,
+                          saved ? "saved" : "save FAILED");
+
+            ackDoc["success"] = saved;
+            ackDoc["message"] = saved ? "Profile saved" : "Failed to save profile";
+            serializeJson(ackDoc, response);
             return response;
         }
         else if (strcmp(type, "calibrate") == 0)
