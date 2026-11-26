@@ -21,7 +21,7 @@ void setup()
     static Modbustatics *awlrSensor = nullptr;
     static INA226SensorInterface *inaAccuSensor = nullptr;
     static INA226SensorInterface *inaSolarSensor = nullptr;
-    for (size_t i = 0; i < sizeof(turb_list) / sizeof(turb_list[0]); i++)
+    for (uint8_t i = 0; i < DEVICE_COUNT; i++)
     {
         if ((turb_list[i].getId() - 10) == DEVICE_ID) // Turbidity id start from 11
             turbSensor = &turb_list[i];

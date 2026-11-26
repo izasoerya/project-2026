@@ -6,8 +6,8 @@
 #ifndef DEVICE_ID
 #define DEVICE_ID 1
 #endif
-
-#if DEVICE_ID < 1 || DEVICE_ID > 9
+#define DEVICE_COUNT 9
+#if DEVICE_ID < 1 || DEVICE_ID > DEVICE_COUNT
 #error "DEVICE_ID must be between 1 and 9"
 #endif
 
