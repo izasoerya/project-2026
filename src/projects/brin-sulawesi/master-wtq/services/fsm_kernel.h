@@ -94,13 +94,20 @@ public:
         }
         else if (_appState == ApplicationState::PUBLISH_STATE)
         {
-            SensorObject sensorAverage{};
-            for (uint8_t i = 0; i < _tick; i++)
+            SensorObject sumDataSensor{};
+            for (SensorObject sensor : _sensorDatas)
             {
-                (sensorAverage.turbidity += _sensorDatas[i].turbidity) /= 2;
-                (sensorAverage.awlr += _sensorDatas[i].awlr) /= 2;
-                (sensorAverage.battery += _sensorDatas[i].battery) /= 2;
+                (sumDataSensor.turbidity += sensor.turbidity);
+                (sumDataSensor.awlr += sensor.awlr);
+                (sumDataSensor.voltAccu += sensor.voltAccu);
+                (sumDataSensor.voltPanel += sensor.voltPanel);
             }
+            SensorObject averagedSensor = SensorObject{
+                .turbidity = sumDataSensor.turbidity / 4.0F,
+                .awlr = sumDataSensor.awlr / 4.0F,
+                .voltAccu = sumDataSensor.voltAccu / 4.0F,
+                .voltPanel = sumDataSensor.voltPanel / 4.0F,
+            };
 
             const uint32_t attemptedTimestamp = millis();
             while (millis() - attemptedTimestamp < 15000)
@@ -115,7 +122,7 @@ public:
                             _calState = cMode;
                         }))
                 {
-                    SensorLogAggregate agregateData(sensorAverage);
+                    SensorLogAggregate agregateData(averagedSensor);
                     uint32_t retryTimestamp = millis();
                     bool isPublishSucccess = Application::publishMqttTask(
                         _netCtx,

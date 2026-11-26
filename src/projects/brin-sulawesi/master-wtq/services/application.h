@@ -103,24 +103,22 @@ public:
     {
         SensorContext *ctx = static_cast<SensorContext *>(pvParam);
 
-        // ReadResult resTurbidity = ctx->turbidity.rawRead();
-        // ReadResult resAwlr = ctx->awlr.rawRead();
-        // float batteryRead = analogRead(A10);
+        ReadResult resTurbidity = ctx->turbidity.rawRead();
+        ReadResult resAWLR = ctx->awlr.rawRead();
 
-        // float turbidity, waterLevel;
-        // if (resTurbidity.isOk())
-        //     turbidity = resTurbidity.value;
-        // if (resAwlr.isOk())
-        //     waterLevel = resAwlr.value;
-
-        // Wire.begin(PIN_SDA, PIN_SCL);
-        // accuINA.begin();
-        // solarINA.begin();
+        bool statusI2C = Wire.begin(ctx->PIN_SDA, ctx->PIN_SCL);
+        bool statusAccu, statusSolar;
+        if (statusI2C)
+        {
+            statusAccu = ctx->accuINA.begin();
+            statusSolar = ctx->solarINA.begin();
+        }
 
         SensorObject sensor = SensorObject{
-            .turbidity = random(10000) / 10.0F,
-            .awlr = 22,
-            .battery = 2.3};
+            .turbidity = static_cast<float>(resTurbidity.isOk() ? resTurbidity.value : -resTurbidity.error),
+            .awlr = static_cast<float>(resAWLR.isOk() ? resAWLR.value : -resAWLR.error),
+            .voltAccu = statusAccu ? ctx->accuINA.readBusVoltage() : -0xE2,
+            .voltPanel = statusSolar ? ctx->solarINA.readBusVoltage() : -0xE2};
         return sensor;
     }
 };

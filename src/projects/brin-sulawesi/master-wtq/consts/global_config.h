@@ -7,8 +7,10 @@ namespace GlobalConfig
 {
     float BATTERY_DANGER = 11.5;
     float BATTERY_WARNING = 11.8;
+    constexpr float LATITUDE = -7.8367746;
+    constexpr float LONGITUDE = 110.3421102;
 
-    constexpr uint8_t deviceID = 1;
+    constexpr uint8_t DEVICE_ID = 1;
     constexpr uint32_t DELAY_SAMPLING = 10000;
     constexpr uint32_t DELAY_TX = 60000;
 
