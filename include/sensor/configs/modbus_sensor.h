@@ -23,12 +23,9 @@ public:
 
     ~ModbusSensor() override = default;
 
-    bool begin()
+    void begin()
     {
-        ReadResult res = _modbusConfig.connect();
-        if (res.isOk())
-            return 1;
-        return 0;
+        _modbusConfig.connect();
     }
 
     ModbusRTUBuilder &build()
@@ -58,7 +55,7 @@ public:
 class Modbustatics : public BaseSensor
 {
 private:
-    const uint8_t _address;
+    const uint16_t _address;
     ModbusRTUBuilder _modbusConfig;
     const std::function<float(float)> _interceptor;
 
@@ -77,6 +74,7 @@ public:
     void begin()
     {
         _modbusConfig.setSlaveId(_id).setFunctionCode(0x03).setAddress(_address).setLengthAddress(1);
+        _modbusConfig.connect();
     }
 
     float read() override
@@ -89,9 +87,7 @@ public:
             return res.value;
         }
         else
-        {
-            return res.error; // TODO: SHOULD RETURN ACTUAL ERROR INSTEAD OF NUMBER
-        }
+            return res.error;
     }
 
     ReadResult rawRead()
