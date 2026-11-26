@@ -107,7 +107,7 @@ public:
         ReadResult resAWLR = ctx->awlr.rawRead();
 
         bool statusI2C = Wire.begin(ctx->PIN_SDA, ctx->PIN_SCL);
-        bool statusAccu, statusSolar;
+        bool statusAccu = false, statusSolar = false;
         if (statusI2C)
         {
             statusAccu = ctx->accuINA.begin();
