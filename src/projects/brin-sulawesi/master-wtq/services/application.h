@@ -103,7 +103,9 @@ public:
     {
         SensorContext *ctx = static_cast<SensorContext *>(pvParam);
 
+        ctx->turbidity.begin();
         ReadResult resTurbidity = ctx->turbidity.rawRead();
+        ctx->awlr.begin();
         ReadResult resAWLR = ctx->awlr.rawRead();
 
         bool statusI2C = Wire.begin(ctx->PIN_SDA, ctx->PIN_SCL);
