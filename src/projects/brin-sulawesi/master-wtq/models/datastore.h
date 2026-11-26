@@ -16,7 +16,7 @@ struct SensorObject
     {
         static char buffer[64];
         snprintf(buffer, sizeof(buffer),
-                 "Turb: %.1f | Lvl: %.1f | VAccu: %.1f | VPanel\n",
+                 "Turb: %.1f | Lvl: %.1f | VAccu: %.1f | VPanel: %.1f",
                  turbidity, awlr, voltAccu, voltPanel);
         return buffer;
     }
@@ -53,7 +53,7 @@ struct SensorLogAggregate
     {
         static char buffer[64];
         snprintf(buffer, sizeof(buffer),
-                 "TURB: %.1f | LVL: %.1f | VAccu: %.1f | VPanel: %.1f | F_HEAP: %u, | MIN_F_HEAP: %u | LARGEST_BLOCK: %u\n",
+                 "TURB: %.1f | LVL: %.1f | VAccu: %.1f | VPanel: %.1f | F_HEAP: %u, | MIN_F_HEAP: %u | LARGEST_BLOCK: %u",
                  sensor.turbidity, sensor.awlr, sensor.voltAccu, sensor.voltPanel,
                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
         return buffer;
@@ -63,7 +63,7 @@ struct SensorLogAggregate
     {
         static char buffer[128];
         snprintf(buffer, sizeof(buffer),
-                 "TURB: %.1f | LVL: %.1f | VAccu: %.1f | VPanel: %.1f | RSSI: %d | F_HEAP: %lu, | MIN_F_HEAP: %lu | LARGEST_BLOCK: %lu\n",
+                 "TURB: %.1f | LVL: %.1f | VAccu: %.1f | VPanel: %.1f | RSSI: %d | F_HEAP: %lu, | MIN_F_HEAP: %lu | LARGEST_BLOCK: %lu",
                  sensor.turbidity, sensor.awlr, sensor.voltAccu, sensor.voltPanel,
                  rssi, ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
         return buffer;
