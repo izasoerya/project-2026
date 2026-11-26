@@ -119,6 +119,7 @@ public:
             .awlr = static_cast<float>(resAWLR.isOk() ? resAWLR.value : -resAWLR.error),
             .voltAccu = statusAccu ? ctx->accuINA.readBusVoltage() : -0xE2,
             .voltPanel = statusSolar ? ctx->solarINA.readBusVoltage() : -0xE2};
+        Serial.printf("[INFO] Sensor Data: %s\n", sensor.toString());
         return sensor;
     }
 };
