@@ -108,9 +108,10 @@ public:
         if (!intervalField.isNull())
         {
             ackDoc["commandId"] = uuid;
-            if (!intervalField.is<uint32_t>() || intervalField.as<uint32_t>() == 0)
+            if (!intervalField.is<uint32_t>() || intervalField.as<uint32_t>() == 0 ||
+                intervalField.as<uint32_t>() > 30UL * 60UL * 1000UL) // max 30 minutes
             {
-                Serial.println("[ERROR] set_interval requires a positive integer value");
+                Serial.println("[ERROR] set_interval requires 1..1800000 ms");
                 ackDoc["success"] = false;
                 ackDoc["message"] = "Invalid set_interval value";
                 serializeJson(ackDoc, response);
