@@ -97,6 +97,12 @@ namespace GlobalConfig
     constexpr HardwareSerial &mbSerial = Serial1;
     constexpr uint8_t DEVICE_COUNT = 4;
 
+    // Clock: synced from NTP while WiFi is up, then written to the slave's UNIX_TIME registers
+    constexpr const char *NTP_SERVER_1 = "pool.ntp.org";
+    constexpr const char *NTP_SERVER_2 = "time.google.com";
+    constexpr uint32_t NTP_TIMEOUT = 5000;            // in ms
+    constexpr uint32_t MIN_VALID_UNIX = 1704067200UL; // 2024-01-01 00:00 UTC, older = clock not set
+
     constexpr uint32_t DELAY_SAMPLING = ARR_DELAY_SAMPLING;
     constexpr uint32_t DELAY_TX = ARR_DELAY_TX;
     constexpr float latitude = ARR_LATITUDE;

@@ -122,7 +122,7 @@ public:
             _netCtx->wifi.disableWiFi();
 
             const SensorObject sensorData = Application::samplingTask(_sensorCtx);
-            _sampleSum.tipping += sensorData.tipping;
+            _sampleSum.tipping = sensorData.tipping; // daily count from the slave: keep latest, don't average
             _sampleSum.voltAccu += sensorData.voltAccu;
             _sampleSum.voltPanel += sensorData.voltPanel;
             _sampleCount++;
@@ -136,7 +136,7 @@ public:
         {
             const float count = _sampleCount > 0 ? float(_sampleCount) : 1.0f;
             const SensorObject averagedSensor = SensorObject{
-                .tipping = _sampleSum.tipping / count,
+                .tipping = _sampleSum.tipping, // latest sample, already a running daily count
                 .voltAccu = _sampleSum.voltAccu / count,
                 .voltPanel = _sampleSum.voltPanel / count,
             };
@@ -169,7 +169,8 @@ public:
             if (_mqttPublishTimeout)
                 Serial.println("[ERROR] Publish timed out, data for this window dropped");
 
-            // set_interval may have arrived while connected to MQTT
+            Application::syncSlaveClockTask(_sensorCtx);
+
             loadInterval();
             resetSamples();
         }

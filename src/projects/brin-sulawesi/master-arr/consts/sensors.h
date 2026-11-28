@@ -5,6 +5,7 @@
 
 #include "sensor/configs/modbus_sensor.h"
 #include "sensor/configs/ina226_sensor.h"
+#include "slave_registers.h"
 
 // Switch this alias to MockINA226Sensor for hardware-independent testing.
 using SelectedINA226Sensor = INA226Sensor;
@@ -18,16 +19,16 @@ using SelectedINA226Sensor = INA226Sensor;
  */
 
 static Modbustatics arr_list[4] = {
-    Modbustatics(1, "arr-1", GlobalConfig::mbSerial, 1, [](float v) { 
+    Modbustatics(1, "arr-1", GlobalConfig::mbSerial, ModbusRegister::TIP_DAY, [](float v) { 
         return v;  
     }),
-    Modbustatics(2, "arr-2", GlobalConfig::mbSerial, 1, [](float v) { 
+    Modbustatics(2, "arr-2", GlobalConfig::mbSerial, ModbusRegister::TIP_DAY, [](float v) { 
         return v;  
     }),
-    Modbustatics(3, "arr-3", GlobalConfig::mbSerial, 1, [](float v) { 
+    Modbustatics(3, "arr-3", GlobalConfig::mbSerial, ModbusRegister::TIP_DAY, [](float v) { 
         return v;  
     }),
-    Modbustatics(4, "arr-4", GlobalConfig::mbSerial, 1, [](float v) { 
+    Modbustatics(4, "arr-4", GlobalConfig::mbSerial, ModbusRegister::TIP_DAY, [](float v) { 
         return v;  
     })
 };

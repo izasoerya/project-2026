@@ -8,6 +8,7 @@
 #include "../models/datastore.h"
 #include "ota/http_ota.h"
 #include "mqtt_cmd_parser.h"
+#include "slave_client.h"
 
 class Application
 {
@@ -97,6 +98,29 @@ public:
         }
         Serial.printf("[INFO] Success publish /data:\n%s\n", msg);
         return true;
+    }
+
+    static bool syncSlaveClockTask(void *pvParam)
+    {
+        SensorContext *ctx = static_cast<SensorContext *>(pvParam);
+
+        configTime(0, 0, GlobalConfig::NTP_SERVER_1, GlobalConfig::NTP_SERVER_2);
+        const uint32_t attempted = millis();
+        while (time(nullptr) < static_cast<time_t>(GlobalConfig::MIN_VALID_UNIX) &&
+               millis() - attempted < GlobalConfig::NTP_TIMEOUT)
+            delay(100);
+
+        const time_t now = time(nullptr);
+        if (now < static_cast<time_t>(GlobalConfig::MIN_VALID_UNIX))
+        {
+            Serial.println("[ERROR] NTP sync timed out, slave clock not updated");
+            return false;
+        }
+
+        const bool ok = SlaveClient::writeUnixTime(ctx->rainFall.getId(), static_cast<uint32_t>(now));
+        if (ok)
+            Serial.printf("[INFO] Slave clock synced to %lu\n", (unsigned long)now);
+        return ok;
     }
 
     static SensorObject samplingTask(void *pvParam)

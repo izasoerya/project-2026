@@ -7,6 +7,7 @@
 #include "../consts/global_config.h"
 #include <ota/http_ota.h>
 #include "db.h"
+#include "slave_client.h"
 
 class MQTTCommandParser
 {
@@ -143,6 +144,18 @@ public:
             ackDoc["commandId"] = uuid;
             ackDoc["success"] = true;
             ackDoc["message"] = "Restarting Now";
+            serializeJson(ackDoc, response);
+
+            return response;
+        }
+        else if (strcmp(type, "restart_slave") == 0)
+        {
+            Serial.println("[INFO] MQTT CMD RESTART SLAVE");
+            const bool ok = SlaveClient::restart(DEVICE_ID); // slave id == ARR DEVICE_ID, see sensors.h
+
+            ackDoc["commandId"] = uuid;
+            ackDoc["success"] = ok;
+            ackDoc["message"] = ok ? "Slave restarting" : "Slave did not respond";
             serializeJson(ackDoc, response);
 
             return response;
